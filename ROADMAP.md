@@ -3,7 +3,7 @@
 > 自用 / Personal use。以下是计划，不代表已实现；按实际使用反馈调整优先级，不预设发布日期。
 > Planned work, not released features. Priorities follow personal-use feedback; no release dates are promised.
 
-## 当前版本 / Current: v0.3.2
+## 当前版本 / Current: v0.3.3
 
 Qt 界面、独立 PDF 处理进程、可见区域分块渲染、原文基线与边缘吸附、字体样式取样、增删文字、字符 / 词段选择与删除预览、本次会话新增文字再次编辑、重叠框选择、删除后保留独立文字框、相邻文字保护、加粗、撤销 / 重做、拖放、加密文件保存。
 
@@ -16,12 +16,16 @@ Work proceeds in this order, with tests before each release. Versions identify w
 
 | 顺序 / Order | 版本 / Version | 计划内容 / Planned work | 验收标准 / Acceptance |
 | --- | --- | --- | --- |
-| 1 | v0.3.3 稳定性与性能基线 / Stability and performance baseline | 处理进程故障恢复、错误提示；测量大页 / 大文件的打开、缩放补清晰、编辑及保存耗时与峰值内存。 / Worker failure recovery and actionable errors; measure large-file open, zoom settling, edits, saves and peak memory. | 失败操作不改变已保存文件；可重新打开继续；基准给出文件规模、测量口径和 P50/P95，不只报滚轮事件耗时。 / Saved files remain unchanged on failure; reopen works; documented fixture sizes, measurement scope and P50/P95. |
-| 2 | v0.4.0 对齐排版 / Alignment | 优先解决表格 / 多栏定位、行距取样、字体家族和粗细匹配；吸附优先考虑附近同列文字。 / Table/column alignment, line-spacing sampling, font-family/weight matching and local-column snap priority. | 中英文表格、多栏、旋转页面的添加位置可复现；替代字体有提示；拖动不因吸附跨列跳动。 / Reproducible placement across mixed-language tables, columns and rotations; explicit fallback; no cross-column snap jumps. |
-| 3 | v0.4.1 编辑工程与恢复 / Editable projects and recovery | 可选工程文件记录源 PDF 标识和文字框；重开后继续编辑；草稿自动保存与崩溃恢复。 / Optional project files track source identity and text boxes; reopen editable sessions; draft autosave and crash recovery. | 源文件变化时明确提示、不错误套用坐标；恢复不覆盖原稿；加密文档不明文保存密码或自动写出解密副本。 / Detect changed sources; preserve originals; never persist plaintext passwords or silently write decrypted copies. |
-| 4 | v0.5.0 Windows 交付 / Windows delivery | 便携 EXE、依赖打包、高 DPI / 多显示器适配、无 Python 环境验证。 / Portable EXE, bundled dependencies, high-DPI/multi-monitor support, clean-machine validation. | 无 Python 的 Windows 测试环境可打开、拖放、编辑、撤销并导出；提供安装包哈希与已知限制。 / Open/drop/edit/undo/export on Windows without Python; published package hashes and limitations. |
+| 1 | v0.4.0 对齐排版 / Alignment | 优先解决表格 / 多栏定位、行距取样、字体家族和粗细匹配；吸附优先考虑附近同列文字。 / Table/column alignment, line-spacing sampling, font-family/weight matching and local-column snap priority. | 中英文表格、多栏、旋转页面的添加位置可复现；替代字体有提示；拖动不因吸附跨列跳动。 / Reproducible placement across mixed-language tables, columns and rotations; explicit fallback; no cross-column snap jumps. |
+| 2 | v0.4.1 编辑工程与恢复 / Editable projects and recovery | 可选工程文件记录源 PDF 标识和文字框；重开后继续编辑；草稿自动保存与崩溃恢复。 / Optional project files track source identity and text boxes; reopen editable sessions; draft autosave and crash recovery. | 源文件变化时明确提示、不错误套用坐标；恢复不覆盖原稿；加密文档不明文保存密码或自动写出解密副本。 / Detect changed sources; preserve originals; never persist plaintext passwords or silently write decrypted copies. |
+| 3 | v0.5.0 Windows 交付 / Windows delivery | 便携 EXE、依赖打包、高 DPI / 多显示器适配、无 Python 环境验证。 / Portable EXE, bundled dependencies, high-DPI/multi-monitor support, clean-machine validation. | 无 Python 的 Windows 测试环境可打开、拖放、编辑、撤销并导出；提供安装包哈希与已知限制。 / Open/drop/edit/undo/export on Windows without Python; published package hashes and limitations. |
 
-## 本轮已完成 / Completed in v0.3.2
+## 本轮已完成 / Completed in v0.3.3
+
+- 进程异常退出后可重启并重新打开已保存文件，明确提示未保存内容无法恢复。 / Restart after worker exit and reopen saved files, with explicit unsaved-work limits.
+- 大文件工作流 P50/P95、后台峰值工作集及保存优化已验证，见 [性能报告 / benchmarks](BENCHMARKS.md)。 / Workflow P50/P95, worker peak working set and save optimization are measured.
+
+### v0.3.2 已完成 / Previously completed
 
 - 重叠文字框通过文字摘要和坐标选择，支持取消。 / Pick overlapping boxes by text and coordinates; cancellation supported.
 - 删除后保留不受影响的独立文字框，保留字体资源；相交或连锁重叠的框保守转为普通文字，撤销恢复。 / Preserve independent boxes and font resources after deletion; retire affected/overlapping clusters conservatively, with undo.

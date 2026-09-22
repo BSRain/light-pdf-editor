@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 import tempfile
 import pymupdf as fitz
+from process_metrics import process_memory
 from pdf_core import add_text, delete_text, text_spans, baseline_offset, text_characters, delete_characters
 
 
@@ -174,6 +175,8 @@ class Engine:
 
     def run(self, request):
         kind = request['kind']
+        if kind == 'metrics':
+            return process_memory()
         if kind == 'open':
             candidate = fitz.open(request['path'])
             password = request.get('password', '')
@@ -294,7 +297,8 @@ class Engine:
                 fd, temp = tempfile.mkstemp(suffix='.pdf', dir=target.parent)
                 os.close(fd)
                 with self.copy_document() as export:
-                    export.save(temp, garbage=4, deflate=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+                    # Remove unused objects and compact xrefs without quadratic duplicate-stream comparison.
+                    export.save(temp, garbage=2, deflate=True, encryption=fitz.PDF_ENCRYPT_KEEP)
                 os.replace(temp, target)
                 self.dirty = False
                 self.history = [(data, True, i, objects) for data, _, i, objects in self.history]

@@ -322,6 +322,89 @@ class QtTests(unittest.TestCase):
         self.wait(lambda: e.draft is not None and e.draft.valid)
         return span
 
+    def kill_worker(self):
+        self.editor.client.process.kill()
+        self.wait(lambda: self.editor.client.dead)
+        self.assertEqual(len(self.messages), 1)
+        self.assertIn('未保存的修改无法恢复', self.messages[0])
+        self.messages.clear()
+
+    def test_worker_restart_reopens_last_export_without_modifying_original(self):
+        e = self.editor
+        original = self.path.read_bytes()
+        self.make_draft()
+        e.apply()
+        self.wait(lambda: not e.busy)
+        output = Path(self.temp.name) / 'last-save.pdf'
+        with patch('pdf_editor.QFileDialog.getSaveFileName', return_value=(str(output), 'PDF')):
+            e.save()
+        self.wait(lambda: not e.busy)
+        saved = output.read_bytes()
+        old = e.client
+        self.kill_worker()
+        self.assertTrue(e.restart_action.isEnabled())
+        self.assertFalse(e.save_action.isEnabled())
+        e.client.command('delete', rect=[0, 0, 500, 500])
+        self.assertFalse(old.commands)
+        e.restart_worker()
+        self.wait(lambda: not e.busy and e.path == output)
+        self.assertIsNot(e.client, old)
+        self.assertFalse(e.client.dead)
+        self.assertFalse(e.restart_action.isEnabled())
+        self.assertTrue(any('Aligned' in span['text'] for span in e.spans))
+        self.assertFalse(e.objects)
+        self.assertEqual(self.path.read_bytes(), original)
+        self.assertEqual(output.read_bytes(), saved)
+        self.assertFalse(e.text_input.isReadOnly())
+
+    def test_failed_worker_restart_cancel_preserves_draft_text(self):
+        e = self.editor
+        self.make_draft()
+        old = e.client
+        draft = e.text_input.toPlainText()
+        self.kill_worker()
+        self.assertTrue(e.text_input.isEnabled())
+        self.assertTrue(e.text_input.isReadOnly())
+        with patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.No):
+            e.restart_worker()
+        self.assertIs(e.client, old)
+        self.assertEqual(e.text_input.toPlainText(), draft)
+        with patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.Yes):
+            e.restart_worker()
+        self.wait(lambda: not e.busy and e.path == self.path)
+        self.assertIsNone(e.draft)
+        self.assertFalse(e.dirty)
+        self.assertEqual(e.text_input.toPlainText(), draft)
+
+    def test_worker_exit_during_insert_recovers_to_original(self):
+        e = self.editor
+        original = self.path.read_bytes()
+        self.make_draft()
+        e.apply()
+        self.assertTrue(e.busy)
+        self.kill_worker()
+        with patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.Yes):
+            e.restart_worker()
+        self.wait(lambda: not e.busy and e.path == self.path)
+        self.assertFalse(any('Aligned' in span['text'] for span in e.spans))
+        self.assertEqual(self.path.read_bytes(), original)
+        self.assertFalse(e.dirty)
+
+    def test_failed_worker_can_open_another_pdf(self):
+        e = self.editor
+        other = Path(self.temp.name) / 'recovered.pdf'
+        fixture(other)
+        self.kill_worker()
+        e.open_pdf(str(other))
+        self.wait(lambda: not e.busy and e.path == other)
+        self.assertFalse(e.client.dead)
+        e.mode.setCurrentIndex(e.mode.findData('precise'))
+        char = next(c for c in e.characters if c['text'] == 'D')
+        e.view.show_character_selection([char])
+        e.delete_characters()
+        self.wait(lambda: not e.busy)
+        self.assertTrue(e.dirty)
+
     def test_qt_pdf_drop_with_chinese_and_spaces(self):
         e = self.editor
         other = Path(self.temp.name) / '另一个 文件.pdf'

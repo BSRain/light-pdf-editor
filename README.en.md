@@ -1,4 +1,4 @@
-# Light PDF Editor v0.3.2 · Qt Edition · Personal Use
+# Light PDF Editor v0.3.3 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -56,6 +56,13 @@ Changing font or size preserves the first baseline where page bounds permit. Bas
 
 Precise deletion operates on extractable PDF characters and leaves gaps in place. Fully overlapping characters must be selected together. Double-click selects whitespace/punctuation-delimited tokens, including apostrophes in contractions. Chinese selects contiguous character runs, without semantic segmentation. Scanned-image and outlined text are unsupported.
 
+## After a worker process exits
+
+- Editing stops; text in the side panel remains selectable for copying.
+- **重启处理进程** (Restart worker) reopens the latest successful export in this session, or the source if none exists. Open PDF can also select another file.
+- **Unsaved edits and session text-box records cannot be recovered**. Restart asks before discarding pending work; encrypted files require the password again.
+- Restart does not change the source or successfully saved files. Automatic draft recovery remains planned.
+
 ## Controls
 
 | Action | Input |
@@ -87,6 +94,8 @@ Precise deletion operates on extractable PDF characters and leaves gaps in place
 
 On this machine, generated text, 1,600-line vector, and large-image fixtures produced median wheel-dispatch-plus-GUI-processing times of about 3.2–3.5 ms (measured locally during v0.3.0 development). **This is not complete PDF render latency or a frame-rate guarantee**, and it is not directly comparable with older benchmarks that measured different operations. The benchmark is included for reproduction.
 
+A new workflow benchmark measures opening, tiles, edits, saves, undo/redo and worker peak working set. See [results and measurement limits](BENCHMARKS.md).
+
 ## Development and verification
 
 ```powershell
@@ -95,9 +104,10 @@ python -m venv .venv
 .\.venv\Scripts\python.exe pdf_editor.py
 .\.venv\Scripts\python.exe -m unittest -v
 .\.venv\Scripts\python.exe benchmark_editor.py
+.\.venv\Scripts\python.exe benchmark_workflows.py --runs 5
 ```
 
-38 tests cover independent boxes surviving redaction, Chinese font/pixel preservation, overlapping-box selection/cancel, reselect/move/update/cancel, preservation of overlapping original text, continued editing after export, encrypted object replacement, double-click token selection, precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
+42 tests cover worker exit, interrupted edits, restart confirmation/cancellation, reopening the last export, independent boxes surviving redaction, Chinese font/pixel preservation, overlapping-box selection/cancel, reselect/move/update/cancel, preservation of overlapping original text, continued editing after export, encrypted object replacement, double-click token selection, precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
 
 | File | Purpose |
 | --- | --- |

@@ -38,7 +38,7 @@ class PdfClient(QObject):
         self.process.readyReadStandardError.connect(self.read_error)
         self.process.started.connect(self.dispatch)
         self.process.errorOccurred.connect(lambda error: self.failure(self.process.errorString()))
-        self.process.finished.connect(lambda code, status: self.failure('PDF 处理进程已停止，请重新启动编辑器。'))
+        self.process.finished.connect(lambda code, status: self.failure('PDF 处理进程已停止。'))
         self.process.start()
 
     def read_error(self):
@@ -47,19 +47,29 @@ class PdfClient(QObject):
     def failure(self, message):
         if not self.stopping and not self.dead:
             self.dead = True
+            self.commands.clear()
+            self.preview = None
+            self.tiles = []
+            self.active = None
             self.failed.emit(message)
 
     def command(self, kind, **fields):
+        if self.dead or self.stopping:
+            return
         self.tiles = []
         self.preview = None
         self.commands.append(dict(kind=kind, **fields))
         self.dispatch()
 
     def request_preview(self, **fields):
+        if self.dead or self.stopping:
+            return
         self.preview = dict(kind='preview', **fields)
         self.dispatch()
 
     def replace_tiles(self, requests):
+        if self.dead or self.stopping:
+            return
         self.tiles = [r for r in requests if not self.active or r.get('key') != self.active.get('key')]
         self.dispatch()
 
@@ -88,7 +98,10 @@ class PdfClient(QObject):
                 response = json.loads(line)
             except ValueError:
                 self.failure('PDF 进程返回了无效数据。')
-                continue
+                return
+            if not isinstance(response, dict) or not self.active or response.get('id') != self.active['id'] or not ('data' in response or 'error' in response):
+                self.failure('PDF 进程返回的数据与当前操作不匹配。')
+                return
             request, self.active = self.active, None
             if not self.stopping and request and response.get('id') == request['id']:
                 response['request'] = request
@@ -473,6 +486,7 @@ class Editor(QMainWindow):
         self.resize(min(1280, available.width() - 60), min(860, available.height() - 60))
         self.setMinimumSize(900, 640)
         self.path = None
+        self.last_saved_path = None
         self.index = 0
         self.count = 0
         self.revision = 0
@@ -531,6 +545,8 @@ class Editor(QMainWindow):
         self.addToolBar(bar)
         self.open_action = self.action(bar, '打开 PDF', lambda: self.open_pdf(), 'Ctrl+O')
         self.save_action = self.action(bar, '另存为', self.save, 'Ctrl+S')
+        self.restart_action = self.action(bar, '重启处理进程', self.restart_worker)
+        self.restart_action.setEnabled(False)
         self.undo_action = self.action(bar, '撤销', self.undo, 'Ctrl+Z')
         self.redo_action = self.action(bar, '重做', self.redo, 'Ctrl+Y')
         self.redo_action.setShortcuts(['Ctrl+Y', 'Ctrl+Shift+Z'])
@@ -661,7 +677,7 @@ class Editor(QMainWindow):
             control.setEnabled(not value)
 
     def discard(self):
-        if self.busy:
+        if self.busy and not self.client.dead:
             self.statusBar().showMessage('正在处理文件，请稍后。', 5000)
             return False
         if self.dirty or self.draft:
@@ -676,22 +692,78 @@ class Editor(QMainWindow):
             path, _ = QFileDialog.getOpenFileName(self, '打开 PDF', '', 'PDF (*.pdf)')
         if not path:
             return
+        if self.client.dead:
+            self.reset_worker()
         self.epoch += 1
         self.set_busy(True)
         self.statusBar().showMessage('正在后台打开 PDF…')
         self.client.command('open', path=str(path), epoch=self.epoch)
 
     def worker_failed(self, message):
+        self.tile_timer.stop()
+        self.preview_timer.stop()
+        self.epoch += 1
+        self.set_busy(True)
+        self.open_action.setEnabled(True)
+        self.restart_action.setEnabled(True)
+        self.text_input.setEnabled(True)
+        self.text_input.setReadOnly(True)
+        note = message + '\n可点击“重启处理进程”重新打开最近另存的文件或原稿。未保存的修改无法恢复；右侧文字仍可复制。'
+        self.statusBar().showMessage(note.replace('\n', ' '))
+        QMessageBox.critical(self, 'PDF 处理进程已停止', note)
+
+    def reset_worker(self):
+        self.tile_timer.stop()
+        self.preview_timer.stop()
+        old = self.client
+        old.result.disconnect(self.on_result)
+        old.failed.disconnect(self.worker_failed)
+        old.close()
+        old.deleteLater()
+        self.epoch += 1
+        self.cancel(local=True)
+        self.view.clear_erase_hover()
+        self.view.scene().clear()
+        self.path = None
+        self.last_saved_path = None
+        self.page_rect = QRectF()
+        self.spans, self.characters, self.objects = [], [], []
+        self.tile_cache.clear()
+        self.tile_items, self.wanted = {}, set()
+        self.tile_group = None
+        self.cache_bytes = 0
+        self.can_undo = self.can_redo = self.dirty = False
+        self.index = self.count = self.revision = 0
+        self.client = PdfClient(self)
+        self.client.result.connect(self.on_result)
+        self.client.failed.connect(self.worker_failed)
+        self.text_input.setReadOnly(False)
+        self.restart_action.setEnabled(False)
         self.set_busy(False)
-        self.statusBar().showMessage(message)
-        self.apply_button.setEnabled(False)
-        QMessageBox.critical(self, 'PDF 进程错误', message)
+        self.page_label.setText('  尚未打开  ')
+        self.update_title()
+
+    def restart_worker(self):
+        if not self.client.dead:
+            return
+        if not self.discard():
+            return
+        target = self.last_saved_path or self.path
+        self.reset_worker()
+        if target:
+            self.open_pdf(str(target))
+        else:
+            self.statusBar().showMessage('处理进程已重启，请打开 PDF。')
 
     def on_result(self, response):
         request = response['request']
         kind = request['kind']
+        if self.client.dead:
+            return
         if request.get('epoch') != self.epoch:
             return
+        if kind == 'open' and 'error' not in response and not response.get('data', {}).get('password_required'):
+            self.last_saved_path = None
         if 'error' in response:
             if kind == 'preview':
                 if request.get('version') == self.preview_version and self.draft:
@@ -750,6 +822,7 @@ class Editor(QMainWindow):
             if key in self.wanted:
                 self.show_tile(key, pixmap, data)
         elif kind == 'save':
+            self.last_saved_path = Path(data['saved'])
             self.dirty = False
             self.set_busy(False)
             self.update_title()

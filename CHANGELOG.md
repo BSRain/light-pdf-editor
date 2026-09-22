@@ -3,6 +3,20 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.3.3 — 2026-09-23
+
+- 处理进程异常退出后禁用编辑，提供重启及重新打开最近导出 / 原稿入口；未保存内容需确认放弃，右侧文字可复制。丢弃旧命令和过期结果。
+  Worker-exit recovery disables editing, offers restart/reopen of the last export or source, confirms discarding unsaved work, preserves copyable input text, and rejects stale commands/results.
+- 工作流基准覆盖生成的 80 页 PDF、大尺寸页面、约 31 MiB 图片 PDF；报告 P50/P95、原始样本和后台峰值工作集。
+  Workflow benchmarks cover 80-page, large-page and approximately 31 MiB image PDFs, with P50/P95, raw samples and worker peak working set.
+- 导出跳过重复流比较，保留未引用对象清理和编号整理。80 页用例保存 P50 从 4069.89 ms 降到 127.79 ms（各 5 次，本机生成用例；部分文件可能更大）。
+  Export skips duplicate-stream comparisons while retaining unused-object cleanup and xref compaction. The generated 80-page fixture save P50 fell from 4069.89 to 127.79 ms across five local runs; some outputs may be larger.
+- 42 项回归测试，包含真实终止后台进程、编辑中断、重启取消、保存文件不变与重启后继续编辑。详情见 [性能报告 / benchmarks](BENCHMARKS.md)。
+  42 regressions include actual worker termination, interrupted edits, canceled restart, unchanged saved files and post-restart editing.
+
+自动恢复未保存修改尚未实现；此次提供重新打开已保存文件的恢复入口。
+Automatic recovery of unsaved changes is not implemented; this release reopens saved files.
+
 ## v0.3.2 — 2026-09-22
 
 - 删除文字后保留远离删除区域的独立文字框；精细选区重新映射字符编号。相交及连锁重叠的文字框保守转为普通 PDF 文字，撤销恢复。

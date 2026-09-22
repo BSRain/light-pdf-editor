@@ -1,0 +1,690 @@
+{
+  "before": {
+    "version": "v0.3.3 development, before save optimization (garbage=4)",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.9",
+    "pymupdf": "1.26.7",
+    "runs": 5,
+    "scope": "Wall time over JSON worker pipe including serialization/PNG and metadata; excludes GUI painting. Each run uses a fresh worker. Startup measured separately; OS disk cache not flushed. P95 uses nearest rank; small samples are descriptive only.",
+    "memory_scope": "Windows worker lifetime peak working set, includes shared pages; excludes GUI and benchmark process. Null on other systems. Not private committed memory.",
+    "fixtures": {
+      "many_pages": {
+        "pages": 80,
+        "page_width_pt": 595,
+        "page_height_pt": 842,
+        "file_mb": 0.631,
+        "timings": {
+          "startup": {
+            "samples": 5,
+            "p50_ms": 278.67,
+            "p95_ms": 300.15,
+            "raw_ms": [
+              300.15,
+              278.67,
+              275.01,
+              267.82,
+              279.21
+            ]
+          },
+          "open_first_page": {
+            "samples": 5,
+            "p50_ms": 49.94,
+            "p95_ms": 62.68,
+            "raw_ms": [
+              62.68,
+              52.08,
+              49.94,
+              49.0,
+              49.89
+            ]
+          },
+          "six_tiles_200_percent": {
+            "samples": 5,
+            "p50_ms": 50.74,
+            "p95_ms": 52.1,
+            "raw_ms": [
+              51.26,
+              52.1,
+              50.74,
+              49.68,
+              49.44
+            ]
+          },
+          "insert_with_thumbnail": {
+            "samples": 5,
+            "p50_ms": 178.32,
+            "p95_ms": 190.95,
+            "raw_ms": [
+              190.95,
+              187.17,
+              177.37,
+              174.8,
+              178.32
+            ]
+          },
+          "begin_reedit": {
+            "samples": 5,
+            "p50_ms": 155.06,
+            "p95_ms": 155.66,
+            "raw_ms": [
+              155.26,
+              153.05,
+              155.66,
+              155.06,
+              154.66
+            ]
+          },
+          "save": {
+            "samples": 5,
+            "p50_ms": 4069.89,
+            "p95_ms": 4469.83,
+            "raw_ms": [
+              4023.65,
+              3976.63,
+              4069.89,
+              4226.3,
+              4469.83
+            ]
+          },
+          "undo": {
+            "samples": 5,
+            "p50_ms": 172.34,
+            "p95_ms": 235.54,
+            "raw_ms": [
+              172.37,
+              169.59,
+              172.34,
+              167.93,
+              235.54
+            ]
+          },
+          "redo": {
+            "samples": 5,
+            "p50_ms": 142.41,
+            "p95_ms": 195.99,
+            "raw_ms": [
+              142.41,
+              154.78,
+              140.95,
+              142.3,
+              195.99
+            ]
+          }
+        },
+        "worker_peak_working_set_mb": [
+          58.63,
+          58.28,
+          58.18,
+          59.16,
+          58.87
+        ]
+      },
+      "large_page": {
+        "pages": 1,
+        "page_width_pt": 2400,
+        "page_height_pt": 3200,
+        "file_mb": 0.031,
+        "timings": {
+          "startup": {
+            "samples": 5,
+            "p50_ms": 288.87,
+            "p95_ms": 297.22,
+            "raw_ms": [
+              297.22,
+              288.1,
+              294.78,
+              288.87,
+              280.88
+            ]
+          },
+          "open_first_page": {
+            "samples": 5,
+            "p50_ms": 177.56,
+            "p95_ms": 195.05,
+            "raw_ms": [
+              195.05,
+              167.91,
+              177.56,
+              173.81,
+              177.8
+            ]
+          },
+          "six_tiles_200_percent": {
+            "samples": 5,
+            "p50_ms": 60.5,
+            "p95_ms": 62.34,
+            "raw_ms": [
+              60.5,
+              59.23,
+              62.01,
+              60.19,
+              62.34
+            ]
+          },
+          "insert_with_thumbnail": {
+            "samples": 5,
+            "p50_ms": 185.5,
+            "p95_ms": 193.3,
+            "raw_ms": [
+              186.57,
+              183.21,
+              193.3,
+              185.5,
+              182.59
+            ]
+          },
+          "begin_reedit": {
+            "samples": 5,
+            "p50_ms": 171.27,
+            "p95_ms": 183.35,
+            "raw_ms": [
+              171.27,
+              165.83,
+              172.53,
+              183.35,
+              170.32
+            ]
+          },
+          "save": {
+            "samples": 5,
+            "p50_ms": 17.26,
+            "p95_ms": 27.05,
+            "raw_ms": [
+              27.05,
+              16.69,
+              18.09,
+              16.29,
+              17.26
+            ]
+          },
+          "undo": {
+            "samples": 5,
+            "p50_ms": 165.69,
+            "p95_ms": 169.31,
+            "raw_ms": [
+              168.22,
+              169.31,
+              161.46,
+              165.69,
+              163.31
+            ]
+          },
+          "redo": {
+            "samples": 5,
+            "p50_ms": 166.53,
+            "p95_ms": 172.59,
+            "raw_ms": [
+              166.53,
+              165.68,
+              167.25,
+              172.59,
+              165.19
+            ]
+          }
+        },
+        "worker_peak_working_set_mb": [
+          68.06,
+          67.77,
+          68.12,
+          67.77,
+          68.19
+        ]
+      },
+      "large_images": {
+        "pages": 3,
+        "page_width_pt": 595,
+        "page_height_pt": 842,
+        "file_mb": 30.936,
+        "timings": {
+          "startup": {
+            "samples": 5,
+            "p50_ms": 278.83,
+            "p95_ms": 301.44,
+            "raw_ms": [
+              301.44,
+              286.04,
+              278.83,
+              275.43,
+              274.54
+            ]
+          },
+          "open_first_page": {
+            "samples": 5,
+            "p50_ms": 94.9,
+            "p95_ms": 112.2,
+            "raw_ms": [
+              112.2,
+              95.07,
+              94.38,
+              93.23,
+              94.9
+            ]
+          },
+          "six_tiles_200_percent": {
+            "samples": 5,
+            "p50_ms": 202.77,
+            "p95_ms": 209.16,
+            "raw_ms": [
+              209.16,
+              203.98,
+              202.77,
+              197.15,
+              197.86
+            ]
+          },
+          "insert_with_thumbnail": {
+            "samples": 5,
+            "p50_ms": 160.27,
+            "p95_ms": 185.66,
+            "raw_ms": [
+              185.66,
+              160.44,
+              156.04,
+              160.27,
+              154.85
+            ]
+          },
+          "begin_reedit": {
+            "samples": 5,
+            "p50_ms": 165.2,
+            "p95_ms": 193.06,
+            "raw_ms": [
+              193.06,
+              163.66,
+              166.94,
+              165.2,
+              159.63
+            ]
+          },
+          "save": {
+            "samples": 5,
+            "p50_ms": 156.51,
+            "p95_ms": 197.77,
+            "raw_ms": [
+              197.77,
+              161.15,
+              156.51,
+              155.61,
+              153.18
+            ]
+          },
+          "undo": {
+            "samples": 5,
+            "p50_ms": 165.62,
+            "p95_ms": 196.08,
+            "raw_ms": [
+              196.08,
+              166.94,
+              165.62,
+              159.27,
+              160.97
+            ]
+          },
+          "redo": {
+            "samples": 5,
+            "p50_ms": 131.05,
+            "p95_ms": 167.44,
+            "raw_ms": [
+              167.44,
+              131.05,
+              139.53,
+              125.03,
+              125.06
+            ]
+          }
+        },
+        "worker_peak_working_set_mb": [
+          199.43,
+          200.97,
+          199.27,
+          201.05,
+          200.59
+        ]
+      }
+    }
+  },
+  "after": {
+    "version": "0.3.3",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.9",
+    "pymupdf": "1.26.7",
+    "runs": 5,
+    "scope": "Wall time over JSON worker pipe including serialization/PNG and metadata; excludes GUI painting. Each run uses a fresh worker. Startup measured separately; OS disk cache not flushed. P95 uses nearest rank; small samples are descriptive only.",
+    "memory_scope": "Windows worker lifetime peak working set, includes shared pages; excludes GUI and benchmark process. Null on other systems. Not private committed memory.",
+    "fixtures": {
+      "many_pages": {
+        "pages": 80,
+        "page_width_pt": 595,
+        "page_height_pt": 842,
+        "file_mb": 0.631,
+        "timings": {
+          "startup": {
+            "samples": 5,
+            "p50_ms": 277.88,
+            "p95_ms": 292.22,
+            "raw_ms": [
+              292.22,
+              273.34,
+              270.53,
+              290.35,
+              277.88
+            ]
+          },
+          "open_first_page": {
+            "samples": 5,
+            "p50_ms": 50.2,
+            "p95_ms": 61.13,
+            "raw_ms": [
+              61.13,
+              48.92,
+              50.2,
+              51.57,
+              49.18
+            ]
+          },
+          "six_tiles_200_percent": {
+            "samples": 5,
+            "p50_ms": 50.11,
+            "p95_ms": 52.88,
+            "raw_ms": [
+              52.88,
+              49.89,
+              49.99,
+              51.11,
+              50.11
+            ]
+          },
+          "insert_with_thumbnail": {
+            "samples": 5,
+            "p50_ms": 178.52,
+            "p95_ms": 189.96,
+            "raw_ms": [
+              184.9,
+              177.25,
+              176.99,
+              189.96,
+              178.52
+            ]
+          },
+          "begin_reedit": {
+            "samples": 5,
+            "p50_ms": 156.26,
+            "p95_ms": 158.33,
+            "raw_ms": [
+              158.33,
+              152.84,
+              155.35,
+              156.72,
+              156.26
+            ]
+          },
+          "save": {
+            "samples": 5,
+            "p50_ms": 127.79,
+            "p95_ms": 133.59,
+            "raw_ms": [
+              133.59,
+              125.82,
+              127.79,
+              125.75,
+              131.44
+            ]
+          },
+          "undo": {
+            "samples": 5,
+            "p50_ms": 155.91,
+            "p95_ms": 162.23,
+            "raw_ms": [
+              162.23,
+              153.64,
+              155.91,
+              152.61,
+              157.2
+            ]
+          },
+          "redo": {
+            "samples": 5,
+            "p50_ms": 130.33,
+            "p95_ms": 132.6,
+            "raw_ms": [
+              132.0,
+              129.61,
+              132.6,
+              128.84,
+              130.33
+            ]
+          }
+        },
+        "worker_peak_working_set_mb": [
+          58.03,
+          59.52,
+          58.1,
+          58.3,
+          59.31
+        ]
+      },
+      "large_page": {
+        "pages": 1,
+        "page_width_pt": 2400,
+        "page_height_pt": 3200,
+        "file_mb": 0.031,
+        "timings": {
+          "startup": {
+            "samples": 5,
+            "p50_ms": 278.44,
+            "p95_ms": 288.97,
+            "raw_ms": [
+              275.84,
+              264.6,
+              278.44,
+              278.65,
+              288.97
+            ]
+          },
+          "open_first_page": {
+            "samples": 5,
+            "p50_ms": 173.04,
+            "p95_ms": 179.14,
+            "raw_ms": [
+              175.82,
+              172.29,
+              170.48,
+              173.04,
+              179.14
+            ]
+          },
+          "six_tiles_200_percent": {
+            "samples": 5,
+            "p50_ms": 58.81,
+            "p95_ms": 60.17,
+            "raw_ms": [
+              58.81,
+              58.71,
+              58.54,
+              59.8,
+              60.17
+            ]
+          },
+          "insert_with_thumbnail": {
+            "samples": 5,
+            "p50_ms": 180.76,
+            "p95_ms": 194.62,
+            "raw_ms": [
+              179.72,
+              180.76,
+              180.04,
+              194.62,
+              182.23
+            ]
+          },
+          "begin_reedit": {
+            "samples": 5,
+            "p50_ms": 165.82,
+            "p95_ms": 170.99,
+            "raw_ms": [
+              165.82,
+              162.45,
+              161.77,
+              170.99,
+              169.74
+            ]
+          },
+          "save": {
+            "samples": 5,
+            "p50_ms": 10.94,
+            "p95_ms": 13.69,
+            "raw_ms": [
+              10.99,
+              10.87,
+              13.69,
+              10.44,
+              10.94
+            ]
+          },
+          "undo": {
+            "samples": 5,
+            "p50_ms": 163.94,
+            "p95_ms": 199.05,
+            "raw_ms": [
+              163.94,
+              159.14,
+              199.05,
+              165.01,
+              162.0
+            ]
+          },
+          "redo": {
+            "samples": 5,
+            "p50_ms": 163.98,
+            "p95_ms": 175.79,
+            "raw_ms": [
+              163.98,
+              175.79,
+              163.49,
+              165.73,
+              162.07
+            ]
+          }
+        },
+        "worker_peak_working_set_mb": [
+          67.77,
+          67.75,
+          67.67,
+          67.74,
+          67.53
+        ]
+      },
+      "large_images": {
+        "pages": 3,
+        "page_width_pt": 595,
+        "page_height_pt": 842,
+        "file_mb": 30.936,
+        "timings": {
+          "startup": {
+            "samples": 5,
+            "p50_ms": 270.21,
+            "p95_ms": 282.48,
+            "raw_ms": [
+              266.68,
+              264.63,
+              270.21,
+              282.48,
+              274.6
+            ]
+          },
+          "open_first_page": {
+            "samples": 5,
+            "p50_ms": 95.88,
+            "p95_ms": 104.13,
+            "raw_ms": [
+              104.13,
+              94.86,
+              93.74,
+              95.88,
+              99.96
+            ]
+          },
+          "six_tiles_200_percent": {
+            "samples": 5,
+            "p50_ms": 196.64,
+            "p95_ms": 201.76,
+            "raw_ms": [
+              198.93,
+              195.62,
+              196.64,
+              201.76,
+              195.26
+            ]
+          },
+          "insert_with_thumbnail": {
+            "samples": 5,
+            "p50_ms": 162.24,
+            "p95_ms": 163.4,
+            "raw_ms": [
+              162.24,
+              153.73,
+              157.29,
+              163.4,
+              162.77
+            ]
+          },
+          "begin_reedit": {
+            "samples": 5,
+            "p50_ms": 165.84,
+            "p95_ms": 171.39,
+            "raw_ms": [
+              171.39,
+              165.84,
+              165.17,
+              166.77,
+              161.19
+            ]
+          },
+          "save": {
+            "samples": 5,
+            "p50_ms": 118.85,
+            "p95_ms": 129.08,
+            "raw_ms": [
+              111.43,
+              123.87,
+              113.21,
+              129.08,
+              118.85
+            ]
+          },
+          "undo": {
+            "samples": 5,
+            "p50_ms": 170.15,
+            "p95_ms": 175.96,
+            "raw_ms": [
+              170.15,
+              164.96,
+              162.06,
+              175.96,
+              172.23
+            ]
+          },
+          "redo": {
+            "samples": 5,
+            "p50_ms": 133.47,
+            "p95_ms": 142.67,
+            "raw_ms": [
+              133.47,
+              129.23,
+              135.33,
+              142.67,
+              133.1
+            ]
+          }
+        },
+        "worker_peak_working_set_mb": [
+          200.0,
+          200.8,
+          199.45,
+          199.32,
+          200.81
+        ]
+      }
+    }
+  }
+}
