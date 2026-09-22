@@ -3,20 +3,34 @@
 > 自用 / Personal use。以下是计划，不代表已实现；按实际使用反馈调整优先级，不预设发布日期。
 > Planned work, not released features. Priorities follow personal-use feedback; no release dates are promised.
 
-## 当前版本 / Current: v0.3.1
+## 当前版本 / Current: v0.3.2
 
-Qt 界面、独立 PDF 处理进程、可见区域分块渲染、原文基线与边缘吸附、字体样式取样、增删文字、字符 / 词段选择与删除预览、本次会话新增文字再次编辑、相邻文字保护、加粗、撤销 / 重做、拖放、加密文件保存。
+Qt 界面、独立 PDF 处理进程、可见区域分块渲染、原文基线与边缘吸附、字体样式取样、增删文字、字符 / 词段选择与删除预览、本次会话新增文字再次编辑、重叠框选择、删除后保留独立文字框、相邻文字保护、加粗、撤销 / 重做、拖放、加密文件保存。
 
-Qt UI, isolated PDF worker, viewport tiles, baseline/edge snapping, style sampling, text insertion/deletion, character/token selection with deletion preview, session-created text re-editing, neighboring-text checks, bold, undo/redo, drag-and-drop, encrypted export.
+Qt UI, isolated PDF worker, viewport tiles, baseline/edge snapping, style sampling, text insertion/deletion, character/token selection with deletion preview, session-created text re-editing, overlapping-box picker, independent boxes preserved across deletion, neighboring-text checks, bold, undo/redo, drag-and-drop, encrypted export.
 
 ## 分阶段计划 / Next versions
 
-| 版本 / Version | 重点 / Focus | 计划内容 / Planned work | 验收标准 / Acceptance |
+按下列顺序推进；每阶段先完成测试再发布。版本是工作批次，不代表承诺的交付日期。
+Work proceeds in this order, with tests before each release. Versions identify work batches, not promised delivery dates.
+
+| 顺序 / Order | 版本 / Version | 计划内容 / Planned work | 验收标准 / Acceptance |
 | --- | --- | --- | --- |
-| v0.3.x | 稳定性 / Stability | 收集经脱敏的实际工作 PDF 用例；修复文字误删、边缘裁切、缩放卡顿和进程异常；完善错误提示。 / Add sanitized real-world fixtures; fix deletion, clipping, zoom stalls and worker errors. | 每个修复有可复现用例；既有保存、加密和对齐测试全部通过。 / Reproducible cases and passing regression tests. |
-| v0.3.x | 精细编辑完善 / Editing refinements | v0.3.1 已完成词段选择与会话内新增文字重编辑；后续改善重叠框选择、页面删除后的编辑记录保留。 / Token selection and session text re-editing shipped in v0.3.1; next improve overlapping-box selection and tracking across redactions. | 保留原文和相邻内容，操作可撤销 / 重做。 / Preserve original/neighboring content with undo/redo. |
-| v0.4.0 | 排版对齐 / Alignment | 更准确的字体家族和粗细匹配；多行行距取样；对齐到列、表格单元格和最近文本行；优化吸附优先级。 / Better font matching, line-spacing sampling, columns/table alignment and snap priorities. | 多栏与表格用例可稳定对齐；字体替代有明确提示。 / Stable alignment on multi-column/table fixtures, explicit font fallback. |
-| v0.5.0 | 桌面交付 / Desktop delivery | Windows 便携 EXE；崩溃恢复草稿；大文档缓存调优；高 DPI 与多显示器验证。 / Portable Windows EXE, draft recovery, large-file tuning, high-DPI/multi-monitor checks. | 无 Python 环境可运行；恢复草稿不覆盖原稿；明确缓存上限并实测交互延迟。 / Runs without Python; recovery preserves originals; measured cache/latency limits. |
+| 1 | v0.3.3 稳定性与性能基线 / Stability and performance baseline | 处理进程故障恢复、错误提示；测量大页 / 大文件的打开、缩放补清晰、编辑及保存耗时与峰值内存。 / Worker failure recovery and actionable errors; measure large-file open, zoom settling, edits, saves and peak memory. | 失败操作不改变已保存文件；可重新打开继续；基准给出文件规模、测量口径和 P50/P95，不只报滚轮事件耗时。 / Saved files remain unchanged on failure; reopen works; documented fixture sizes, measurement scope and P50/P95. |
+| 2 | v0.4.0 对齐排版 / Alignment | 优先解决表格 / 多栏定位、行距取样、字体家族和粗细匹配；吸附优先考虑附近同列文字。 / Table/column alignment, line-spacing sampling, font-family/weight matching and local-column snap priority. | 中英文表格、多栏、旋转页面的添加位置可复现；替代字体有提示；拖动不因吸附跨列跳动。 / Reproducible placement across mixed-language tables, columns and rotations; explicit fallback; no cross-column snap jumps. |
+| 3 | v0.4.1 编辑工程与恢复 / Editable projects and recovery | 可选工程文件记录源 PDF 标识和文字框；重开后继续编辑；草稿自动保存与崩溃恢复。 / Optional project files track source identity and text boxes; reopen editable sessions; draft autosave and crash recovery. | 源文件变化时明确提示、不错误套用坐标；恢复不覆盖原稿；加密文档不明文保存密码或自动写出解密副本。 / Detect changed sources; preserve originals; never persist plaintext passwords or silently write decrypted copies. |
+| 4 | v0.5.0 Windows 交付 / Windows delivery | 便携 EXE、依赖打包、高 DPI / 多显示器适配、无 Python 环境验证。 / Portable EXE, bundled dependencies, high-DPI/multi-monitor support, clean-machine validation. | 无 Python 的 Windows 测试环境可打开、拖放、编辑、撤销并导出；提供安装包哈希与已知限制。 / Open/drop/edit/undo/export on Windows without Python; published package hashes and limitations. |
+
+## 本轮已完成 / Completed in v0.3.2
+
+- 重叠文字框通过文字摘要和坐标选择，支持取消。 / Pick overlapping boxes by text and coordinates; cancellation supported.
+- 删除后保留不受影响的独立文字框，保留字体资源；相交或连锁重叠的框保守转为普通文字，撤销恢复。 / Preserve independent boxes and font resources after deletion; retire affected/overlapping clusters conservatively, with undo.
+- 回归覆盖中文像素一致性、精细删除字符编号重映射、四种旋转与加密导出。 / Regressions cover Chinese pixel preservation, precise-selection ID remapping, rotations and encrypted export.
+
+## 迭代方法 / Iteration process
+
+每轮限定一至两个可验证问题：添加脱敏或生成的复现用例 → 实现 → 核心与 Qt 回归 → 更新中英文说明和日志 → Git 提交与版本标签。真实工作 PDF 仅在用户提供并同意使用后作为本地验证材料，不自动加入仓库。
+Each iteration targets one or two verifiable problems: sanitized/generated fixture, implementation, core/Qt regression, bilingual documentation, commit and tag. Real work PDFs require user-provided authorization for local validation and are never automatically committed.
 
 ## 暂不纳入 / Outside current scope
 

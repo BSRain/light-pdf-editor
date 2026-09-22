@@ -1,6 +1,7 @@
 """Isolated PDF owner. One JSON command/response per line over QProcess pipes."""
 import base64
 from copy import deepcopy
+from collections import Counter
 import hashlib
 import json
 import os
@@ -94,6 +95,74 @@ class Engine:
             offset=baseline_offset(spec.get('fontfile'), spec['size'], spec.get('bold', False)),
             bbox=[spec['x'], spec['y'], spec['x'] + spec['width'], spec['y'] + spec['height']],
             streams=[(x, hashlib.sha256(self.doc.xref_stream(x)).hexdigest()) for x in streams])
+
+    def delete_preserving_objects(self, index, rect=None, ids=None):
+        chars = text_characters(self.doc[index])
+        original_fonts = self.doc[index].get_fonts()
+        if ids is not None:
+            selected = set(ids)
+            if not selected or not selected.issubset(range(len(chars))):
+                raise ValueError('文字选区已失效，请重新选择。')
+            targets = [c for c in chars if c['id'] in selected]
+            areas = [fitz.Rect(c['bbox']) for c in targets]
+        else:
+            areas = [fitz.Rect(rect)]
+        survivors = [o for o in self.objects.values() if o['index'] == index and
+                     not any(fitz.Rect(o['bbox']).intersects(area) for area in areas)]
+        # Retire an overlapping cluster together to preserve paint order relative
+        # to rewritten objects; detached survivors are reattached above that base.
+        page_objects = [o for o in self.objects.values() if o['index'] == index]
+        while True:
+            survivor_ids = {o['id'] for o in survivors}
+            retired = [o for o in page_objects if o['id'] not in survivor_ids]
+            independent = [o for o in survivors if not any(
+                fitz.Rect(o['bbox']).intersects(fitz.Rect(other['bbox'])) for other in retired)]
+            if len(independent) == len(survivors):
+                break
+            survivors = independent
+        order = self.doc[index].get_contents()
+        survivors.sort(key=lambda o: min(order.index(xref) for xref, _ in o['streams']))
+        # Keep original streams intact outside the deletion region. Redaction may
+        # rewrite every stream still attached to the page, even distant ones.
+        for obj in survivors:
+            self.remove_object(self.doc, obj)
+        if ids is not None:
+            signatures = Counter((c['text'], *c['bbox']) for c in targets)
+            remapped = []
+            for char in text_characters(self.doc[index]):
+                key = (char['text'], *char['bbox'])
+                if signatures[key]:
+                    remapped.append(char['id'])
+                    signatures[key] -= 1
+            if any(signatures.values()):
+                raise ValueError('无法可靠定位所选文字，已取消删除。')
+            delete_characters(self.doc[index], remapped)
+        else:
+            delete_text(self.doc[index], rect)
+        contents = self.doc[index].get_contents()
+        for obj in survivors:
+            contents.extend(xref for xref, _ in obj['streams'])
+        if survivors:
+            # Redaction drops unused font resources while the surviving streams
+            # are detached. Restore their original font references before reuse.
+            owner, prefix = self.doc[index].xref, 'Resources/'
+            kind, value = self.doc.xref_get_key(owner, 'Resources')
+            if kind == 'xref':
+                owner, prefix = int(value.split()[0]), ''
+            kind, value = self.doc.xref_get_key(owner, prefix + 'Font')
+            if kind == 'xref':
+                owner, prefix = int(value.split()[0]), ''
+            else:
+                prefix += 'Font/'
+            present = {font[4] for font in self.doc[index].get_fonts()}
+            for font in original_fonts:
+                if font[4] not in present:
+                    self.doc.xref_set_key(owner, prefix + font[4], f'{font[0]} 0 R')
+        refs = ' '.join(f'{xref} 0 R' for xref in contents)
+        self.doc.xref_set_key(self.doc[index].xref, 'Contents', '[' + refs + ']')
+        survivor_ids = {o['id'] for o in survivors}
+        self.objects = {key: obj for key, obj in self.objects.items()
+                        if obj['index'] != index or key in survivor_ids}
 
     def limit_history(self):
         # Shared undo/redo budget. A single oversize snapshot is retained.
@@ -189,16 +258,13 @@ class Engine:
                 elif kind == 'delete_chars':
                     if request.get('revision') != self.revision:
                         raise ValueError('页面已变化，请重新选择文字。')
-                    delete_characters(self.doc[index], request['ids'])
+                    self.delete_preserving_objects(index, ids=request['ids'])
                 else:
-                    delete_text(self.doc[index], request['rect'])
+                    self.delete_preserving_objects(index, rect=request['rect'])
             except Exception:
                 self.restore(before)
                 self.objects = before_objects
                 raise
-            if kind in ('delete', 'delete_chars'):
-                # Redaction rewrites page streams: retire only objects on this page.
-                self.objects = {key: obj for key, obj in self.objects.items() if obj['index'] != index}
             self.end_edit()
             self.future = []
             self.history.append((before, self.dirty, index, before_objects))

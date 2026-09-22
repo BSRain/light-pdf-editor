@@ -720,10 +720,10 @@ class Editor(QMainWindow):
             self.load_page(data)
             self.restore_object_draft(data['edit_object'])
         elif kind in ('open', 'page', 'insert', 'delete', 'delete_chars', 'undo', 'redo', 'update_object', 'cancel_edit'):
-            retired_objects = kind in ('delete', 'delete_chars') and bool(self.objects)
+            retired_objects = kind in ('delete', 'delete_chars') and bool({o['id'] for o in self.objects} - {o['id'] for o in data.get('objects', [])})
             self.load_page(data, fit=kind in ('open', 'page'))
             if retired_objects:
-                self.statusBar().showMessage('已删除文字。本页先前新增的文字暂不能再次编辑；撤销此次删除可恢复。', 10000)
+                self.statusBar().showMessage('已删除文字。与删除范围相交或连锁重叠的文字框已转为普通文字；未受影响的文字框仍可编辑。撤销可恢复。', 10000)
         elif kind == 'preview':
             if self.draft and request['version'] == self.preview_version:
                 baseline = self.draft.y() + self.draft.offset
@@ -876,12 +876,20 @@ class Editor(QMainWindow):
         if self.draft:
             self.statusBar().showMessage('请先应用或取消当前文字预览。', 5000)
             return
-        target = next((o for o in reversed(self.objects) if
+        candidates = [o for o in reversed(self.objects) if
             QRectF(o['bbox'][0], o['bbox'][1], o['bbox'][2] - o['bbox'][0],
-                   o['bbox'][3] - o['bbox'][1]).contains(point)), None)
-        if target is None:
-            self.statusBar().showMessage('此处没有可重新编辑的新增文字。仅支持本次打开后添加、且所在页未执行文字删除的对象。', 7000)
+                   o['bbox'][3] - o['bbox'][1]).contains(point)]
+        if not candidates:
+            self.statusBar().showMessage('此处没有可重新编辑的新增文字。仅支持本次打开后添加、且未受文字删除影响的文字框。', 7000)
             return
+        target = candidates[0]
+        if len(candidates) > 1:
+            labels = [f"{i + 1}. {o['spec']['text'].replace(chr(10), ' ')[:48]}  (X={o['spec']['x']:.1f}, Y={o['spec']['y']:.1f})"
+                      for i, o in enumerate(candidates)]
+            label, accepted = QInputDialog.getItem(self, '选择重叠文字框', '此处有多个文字框，请选择要编辑的文字：', labels, 0, False)
+            if not accepted:
+                return
+            target = candidates[labels.index(label)]
         self.epoch += 1
         self.set_busy(True)
         self.client.command('begin_edit', epoch=self.epoch, index=self.index,

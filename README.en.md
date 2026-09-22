@@ -1,4 +1,4 @@
-# Light PDF Editor v0.3.1 · Qt Edition · Personal Use
+# Light PDF Editor v0.3.2 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -35,7 +35,7 @@ Changing font or size preserves the first baseline where page bounds permit. Bas
 3. The preview hides the old text while editing. **应用修改** / Ctrl+Enter replaces it; Esc restores the original state.
 4. An update is one undoable/redoable operation. Saving does not end the session, so editing can continue after export.
 
-**Scope:** only text inserted since opening this document is tracked. Reopening starts a new session; exported text remains ordinary PDF content. Text deletion retires previously inserted boxes on that page because page contents are rewritten; undoing the deletion restores them. Overlapping boxes select the most recently inserted box first.
+**Scope:** only text inserted since opening this document is tracked. Reopening starts a new session; exported text remains ordinary PDF content. Text deletion keeps independent boxes away from the affected region editable. Intersecting boxes and their overlapping cluster become ordinary PDF text; undo restores editing. Clicking overlapping boxes opens a picker with text excerpts and coordinates; cancellation leaves the document unchanged.
 
 ![Re-editing an inserted text box](ui_reedit.png)
 
@@ -97,7 +97,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe benchmark_editor.py
 ```
 
-33 tests cover reselect/move/update/cancel, preservation of overlapping original text, continued editing after export, encrypted object replacement, double-click token selection, precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
+38 tests cover independent boxes surviving redaction, Chinese font/pixel preservation, overlapping-box selection/cancel, reselect/move/update/cancel, preservation of overlapping original text, continued editing after export, encrypted object replacement, double-click token selection, precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
 
 | File | Purpose |
 | --- | --- |

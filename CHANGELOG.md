@@ -3,6 +3,20 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.3.2 — 2026-09-22
+
+- 删除文字后保留远离删除区域的独立文字框；精细选区重新映射字符编号。相交及连锁重叠的文字框保守转为普通 PDF 文字，撤销恢复。
+  Preserve independent text boxes across deletion and remap precise character IDs. Affected/overlapping clusters become ordinary PDF text, reversible with undo.
+- 保留文字框重新挂接时恢复所需字体资源，修复中文乱码；保持独立文字框的绘制顺序。
+  Restore required font resources when reattaching preserved boxes, fixing Chinese corruption; preserve relative box paint order.
+- 点击重叠框时可按文字摘要和坐标选择目标，取消不改变文档。
+  Select overlapping boxes by text excerpts and coordinates; cancellation leaves the document unchanged.
+- 路线图明确四个后续阶段：稳定性与性能、对齐排版、编辑工程与恢复、Windows 便携交付。
+  Roadmap defines stability/performance, alignment, editable projects/recovery and portable Windows delivery.
+
+38 项回归测试覆盖删除后继续编辑、中文字体与像素保留、加密 / 旋转导出、重叠框选择、撤销 / 重做及既有功能。
+38 regression tests cover continued editing after deletion, Chinese font/pixel preservation, encrypted/rotated export, overlapping-box selection, history and existing behavior.
+
 ## v0.3.1 — 2026-09-22
 
 ### 新增与改进 / Added and improved

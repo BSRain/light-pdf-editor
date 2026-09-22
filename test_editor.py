@@ -558,6 +558,31 @@ class QtTests(unittest.TestCase):
         self.assertEqual(e.characters, before)
         self.assertIsNone(e.editing_id)
 
+    def test_overlapping_box_picker_selects_older_box_and_can_cancel(self):
+        e = self.editor
+        self.make_draft()
+        e.apply()
+        self.wait(lambda: not e.busy)
+        first = e.objects[-1]
+        e.place(QPointF(first['spec']['x'], first['spec']['y'] + first['offset']))
+        e.text_input.setPlainText('Second overlapping')
+        self.wait(lambda: e.draft.valid)
+        e.apply()
+        self.wait(lambda: not e.busy)
+        e.mode.setCurrentIndex(e.mode.findData('edit'))
+        point = QPointF(first['bbox'][0] + 20, first['bbox'][1] + 20)
+        with patch('pdf_editor.QInputDialog.getItem', side_effect=lambda *args: (args[3][-1], False)):
+            e.edit_at(point)
+        self.assertFalse(e.busy)
+        self.assertIsNone(e.draft)
+        with patch('pdf_editor.QInputDialog.getItem', side_effect=lambda *args: (args[3][-1], True)):
+            e.edit_at(point)
+        self.wait(lambda: not e.busy and e.draft and e.draft.valid)
+        self.assertEqual(e.editing_id, first['id'])
+        self.assertEqual(e.text_input.toPlainText(), first['spec']['text'])
+        e.cancel()
+        self.wait(lambda: not e.busy)
+
     def test_double_click_selects_word_without_deleting(self):
         e = self.editor
         e.mode.setCurrentIndex(e.mode.findData('precise'))

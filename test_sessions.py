@@ -108,13 +108,16 @@ class SessionTests(unittest.TestCase):
         e.run(dict(kind='open', path=str(output)))
         self.assertFalse(e.objects)
 
-    def test_redaction_retires_page_objects_and_undo_restores_identity(self):
+    def test_redaction_preserves_distant_objects_and_undo_restores_identity(self):
         e = self.engine
         first = self.add()
         second = self.add(dict(self.spec, x=30, y=150), index=1)
         target = e.doc[0].search_for('DELETE')[0]
         result = e.run(dict(kind='delete', index=0, rect=list(target)))
-        self.assertEqual(result['objects'], [])
+        self.assertEqual([o['id'] for o in result['objects']], [first['id']])
+        self.begin(e.objects[first['id']])
+        self.assertNotIn('Session', e.edit_doc[0].get_text())
+        e.run(dict(kind='cancel_edit'))
         self.assertIn(second['id'], e.objects)
         e.run(dict(kind='undo'))
         self.assertIn(first['id'], e.objects)
@@ -145,6 +148,73 @@ class SessionTests(unittest.TestCase):
                     self.assertNotIn('Session', saved[0].get_text())
                 self.begin(e.objects[obj['id']])
                 e.run(dict(kind='cancel_edit'))
+
+    def test_distant_chinese_font_and_pixels_survive_redaction(self):
+        e = self.engine
+        obj = self.add(dict(self.spec, y=350, text='中文保留测试', fontfile=windows_fonts()['微软雅黑']))
+        clip = fitz.Rect(45, 345, 285, 435)
+        pixels = e.doc[0].get_pixmap(clip=clip).samples
+        target = e.doc[0].search_for('DELETE')[0]
+        e.run(dict(kind='delete', rect=list(target)))
+        self.assertIn('中文保留测试', e.doc[0].get_text())
+        self.assertEqual(e.doc[0].get_pixmap(clip=clip).samples, pixels)
+        self.begin(e.objects[obj['id']])
+        self.assertNotIn('中文保留测试', e.edit_doc[0].get_text())
+        self.update(obj, dict(obj['spec'], text='中文再次修改'))
+        output = Path(self.temp.name) / 'chinese.pdf'
+        e.run(dict(kind='save', path=str(output)))
+        with fitz.open(output) as saved:
+            self.assertIn('中文再次修改', saved[0].get_text())
+
+    def test_precise_delete_preserves_objects_after_id_remap(self):
+        e = self.engine
+        obj = self.add(dict(self.spec, y=350))
+        # Add content after the detachable object so its original IDs must shift.
+        touched = self.add(dict(self.spec, y=470, text='Remove here'))
+        chars = text_characters(e.doc[0])
+        target = next(c for c in chars if c['text'] == 'R' and c['bbox'][1] > 450)
+        e.run(dict(kind='delete_chars', index=0, revision=e.revision, ids=[target['id']]))
+        self.assertIn(obj['id'], e.objects)
+        self.assertNotIn(touched['id'], e.objects)
+        self.begin(e.objects[obj['id']])
+        self.assertNotIn('Session', e.edit_doc[0].get_text())
+        e.run(dict(kind='cancel_edit'))
+        self.begin(e.objects[obj['id']])
+        self.update(obj, dict(self.spec, y=350, text='Still editable'))
+        self.assertIn('Still', e.doc[0].get_text())
+        self.assertIn('emove', e.doc[0].get_text())
+
+    def test_encrypted_rotated_deletion_then_reedit_export(self):
+        e = self.engine
+        for angle in (0, 90, 180, 270):
+            with self.subTest(rotation=angle):
+                path = Path(self.temp.name) / f'redact-{angle}.pdf'
+                fixture(path, rotation=angle, encrypted=True)
+                e.run(dict(kind='open', path=str(path), password='user-test'))
+                obj = self.add(dict(self.spec, y=350))
+                target = next(c for c in text_characters(e.doc[0]) if c['text'] == 'D')
+                e.run(dict(kind='delete_chars', index=0, revision=e.revision, ids=[target['id']]))
+                self.begin(e.objects[obj['id']])
+                self.update(obj, dict(self.spec, y=350, text='Survivor'))
+                output = Path(self.temp.name) / f'export-{angle}.pdf'
+                e.run(dict(kind='save', path=str(output)))
+                with fitz.open(output) as doc:
+                    self.assertTrue(doc.authenticate('user-test'))
+                    self.assertIn('Survivor', doc[0].get_text())
+                    self.assertNotIn('DELETE', doc[0].get_text())
+                    self.assertIn('Reference', doc[0].get_text())
+
+    def test_overlapping_cluster_is_retired_and_undo_restores(self):
+        e = self.engine
+        first = self.add(dict(self.spec, y=350))
+        second = self.add(dict(self.spec, x=180, y=350, text='Overlapping'))
+        e.run(dict(kind='delete', index=0, rect=[50, 350, 80, 380]))
+        self.assertFalse(e.objects)
+        e.run(dict(kind='undo'))
+        self.assertIn(first['id'], e.objects)
+        self.assertIn(second['id'], e.objects)
+        e.run(dict(kind='redo'))
+        self.assertFalse(e.objects)
 
     def test_word_selection_respects_punctuation_line_and_rotation(self):
         with fitz.open() as doc:
