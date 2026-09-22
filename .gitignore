@@ -14,3 +14,4 @@ __pycache__/
 tmp/
 output/
 zoom_benchmark.json
+qt_benchmark.json

@@ -1,790 +1,983 @@
-"""Local PDF text editor. Run with Python 3.10+."""
-from pathlib import Path
-import os
-import tempfile
-import sys
-import hashlib
+"""Qt UI; PDF parsing, editing and rendering run in pdf_worker.py."""
+from collections import OrderedDict, deque
+import base64
+import json
 import math
-from functools import lru_cache
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog, colorchooser
-import pymupdf as fitz
-from PIL import Image, ImageTk
-from tkinterdnd2 import TkinterDnD, DND_FILES
+from pathlib import Path
+import sys
+from PySide6.QtCore import Qt, QObject, Signal, QProcess, QTimer, QPointF, QRectF
+from PySide6.QtGui import QAction, QColor, QPainter, QPen, QPixmap, QImage, QFont
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QGraphicsView, QGraphicsScene,
+    QGraphicsObject, QVBoxLayout, QFormLayout, QLabel, QPushButton, QToolBar, QComboBox,
+    QDoubleSpinBox, QCheckBox, QPlainTextEdit, QDockWidget, QFileDialog, QMessageBox,
+    QColorDialog, QInputDialog, QLineEdit, QScrollArea, QStyleFactory)
+from pdf_core import windows_fonts
+from alignment import snap_box, nearest_span, match_font
+from version import __version__
 
 
-def windows_fonts():
-    folder = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts'
-    names = {'微软雅黑': 'msyh.ttc', '宋体': 'simsun.ttc', '黑体': 'simhei.ttf',
-             '楷体': 'simkai.ttf', '仿宋': 'simfang.ttf', 'Arial': 'arial.ttf',
-             'Times New Roman': 'times.ttf', 'Consolas': 'consola.ttf'}
-    return {name: str(folder / file) for name, file in names.items() if (folder / file).exists()}
+class PdfClient(QObject):
+    result = Signal(dict)
+    failed = Signal(str)
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.commands = deque()
+        self.preview = None
+        self.tiles = []
+        self.active = None
+        self.serial = 0
+        self.buffer = bytearray()
+        self.stopping = False
+        self.dead = False
+        self.stderr = ''
+        self.process = QProcess(self)
+        self.process.setProgram(sys.executable)
+        self.process.setArguments(['-u', str(Path(__file__).with_name('pdf_worker.py'))])
+        self.process.readyReadStandardOutput.connect(self.read)
+        self.process.readyReadStandardError.connect(self.read_error)
+        self.process.started.connect(self.dispatch)
+        self.process.errorOccurred.connect(lambda error: self.failure(self.process.errorString()))
+        self.process.finished.connect(lambda code, status: self.failure('PDF 处理进程已停止，请重新启动编辑器。'))
+        self.process.start()
 
-@lru_cache(maxsize=24)
-def load_font(path):
-    return fitz.Font(fontfile=path)
+    def read_error(self):
+        self.stderr = (self.stderr + bytes(self.process.readAllStandardError()).decode('utf-8', 'replace'))[-4000:]
 
+    def failure(self, message):
+        if not self.stopping and not self.dead:
+            self.dead = True
+            self.failed.emit(message)
 
-def bold_font_path(path):
-    if not path:
-        return None
-    path = Path(path)
-    variants = {'msyh.ttc': 'msyhbd.ttc', 'arial.ttf': 'arialbd.ttf',
-                'times.ttf': 'timesbd.ttf', 'consola.ttf': 'consolab.ttf'}
-    name = variants.get(path.name.lower())
-    candidate = path.with_name(name) if name else None
-    return str(candidate) if candidate and candidate.exists() else None
+    def command(self, kind, **fields):
+        self.tiles = []
+        self.preview = None
+        self.commands.append(dict(kind=kind, **fields))
+        self.dispatch()
 
+    def request_preview(self, **fields):
+        self.preview = dict(kind='preview', **fields)
+        self.dispatch()
 
-def add_text(page, x, y, text, size, color, fontfile=None, width=None, height=None, bold=False):
-    page_width, page_height = page.rect.width, page.rect.height
-    if not (0 <= x < page_width and 0 <= y < page_height):
-        raise ValueError('请在页面内点击。')
-    box_width = page_width - x - 6 if width is None else width
-    box_height = page_height - y - 6 if height is None else height
-    if box_width <= 0 or box_height <= 0 or x + box_width > page_width or y + box_height > page_height:
-        raise ValueError('文字框超出页面，请移动位置或减小文字框尺寸。')
-    rect = fitz.Rect(x, y, x + box_width, y + box_height) * page.derotation_matrix
-    synthetic_bold = False
-    if bold:
-        variant = bold_font_path(fontfile)
-        if variant:
-            fontfile = variant
+    def replace_tiles(self, requests):
+        self.tiles = [r for r in requests if not self.active or r.get('key') != self.active.get('key')]
+        self.dispatch()
+
+    def dispatch(self):
+        if self.stopping or self.dead or self.active is not None or self.process.state() != QProcess.ProcessState.Running:
+            return
+        if self.commands:
+            request = self.commands.popleft()
+        elif self.preview is not None:
+            request, self.preview = self.preview, None
+        elif self.tiles:
+            request = self.tiles.pop(0)
         else:
-            synthetic_bold = not (fontfile and load_font(fontfile).is_bold)
-    fontname = 'china-s'
-    if fontfile:
-        font = load_font(fontfile)
-        missing = set(c for c in text if not c.isspace() and not font.has_glyph(ord(c)))
-        if missing:
-            raise ValueError('当前字体不支持这些字符：' + ''.join(sorted(missing))[:16] + '。请选择其他字体。')
-        fontname = 'PE' + hashlib.sha256(str(fontfile).encode()).hexdigest()[:16]
-    remaining = page.insert_textbox(rect, text, fontsize=size, fontname=fontname, fontfile=fontfile,
-                                   color=color, fill=color, rotate=page.rotation,
-                                   render_mode=2 if synthetic_bold else 0,
-                                   border_width=size * 0.025 if synthetic_bold else 0.05)
-    if remaining < 0:
-        raise ValueError('文字框放不下这些文字，请增大文字框或减小字号。')
+            return
+        self.serial += 1
+        request['id'] = self.serial
+        self.active = request
+        self.process.write((json.dumps(request, ensure_ascii=False) + '\n').encode('utf-8'))
 
-
-def delete_text(page, visible_rect):
-    rect = fitz.Rect(visible_rect) * page.derotation_matrix
-    # Avoid applying any redactions already in the source document.
-    if any(a.type[0] == fitz.PDF_ANNOT_REDACT for a in (page.annots() or [])):
-        raise ValueError('本页有已有的涂黑标记，请先在原软件中处理这些标记。')
-    chars = [c for b in page.get_text('rawdict')['blocks'] if 'lines' in b
-             for line in b['lines'] for span in line['spans'] for c in span['chars']
-             if fitz.Rect(c['bbox']).intersects(rect)]
-    if not chars:
-        raise ValueError('选区内没有可删除的文字。扫描件中的文字是图片，暂不支持。')
-    page.add_redact_annot(rect, fill=False, cross_out=False)
-    page.apply_redactions(images=0, graphics=0, text=0)
-
-
-class Editor:
-    def __init__(self, root):
-        self.root = root
-        self.doc = None
-        self.path = None
-        self.index = 0
-        self.zoom = 1.25
-        self.history = []
-        self.dirty = False
-        self.color = (0, 0, 0)
-        self.start = None
-        self.selection = None
-        self.anchor = None
-        self.preview_job = None
-        self.drag_state = None
-        self.preview_valid = False
-        self.fit_mode = False
-        self.resize_job = None
-        self.origin = (20, 20)
-        self.fonts = windows_fonts()
-        self.revision = 0
-        self.display_key = None
-        self.display_list = None
-        self.sharp_image = None
-        self.sharp_key = None
-        self.sharp_zoom = None
-        self.zoom_job = None
-        root.title('轻简 PDF · 文字编辑器')
-        root.geometry('1280x860')
-        root.minsize(980, 680)
-        root.option_add('*Font', ('Microsoft YaHei UI', 10))
-        style = ttk.Style()
-        style.theme_use('vista' if 'vista' in style.theme_names() else 'clam')
-        style.configure('TButton', padding=(12, 7))
-        toolbar = ttk.Frame(root, padding=12)
-        toolbar.pack(fill='x')
-        for label, command in [('打开 PDF', self.open), ('另存为', self.save), ('撤销', self.undo)]:
-            ttk.Button(toolbar, text=label, command=command).pack(side='left', padx=3)
-        self.mode = tk.StringVar(value='add')
-        for label, value in [('添加文字', 'add'), ('框选删除', 'delete')]:
-            ttk.Radiobutton(toolbar, text=label, variable=self.mode, value=value,
-                            command=self.change_mode).pack(side='left', padx=12)
-        nav = ttk.Frame(root, padding=(12, 0, 12, 10))
-        nav.pack(fill='x')
-        ttk.Button(nav, text='上一页', command=lambda: self.turn(-1)).pack(side='left')
-        self.page_label = ttk.Label(nav, text='尚未打开文件', width=24, anchor='center')
-        self.page_label.pack(side='left')
-        ttk.Button(nav, text='下一页', command=lambda: self.turn(1)).pack(side='left')
-        ttk.Button(nav, text='适合页面', command=self.fit_page).pack(side='left', padx=12)
-        ttk.Button(nav, text='−', command=lambda: self.scale(-0.25)).pack(side='right')
-        self.zoom_label = ttk.Label(nav, text='125%', width=7, anchor='center')
-        self.zoom_label.pack(side='right')
-        ttk.Button(nav, text='+', command=lambda: self.scale(0.25)).pack(side='right')
-        body = ttk.Frame(root)
-        body.pack(fill='both', expand=True)
-        self.build_panel(body)
-        area = ttk.Frame(body)
-        area.pack(side='left', fill='both', expand=True)
-        area.rowconfigure(0, weight=1)
-        area.columnconfigure(0, weight=1)
-        self.canvas = tk.Canvas(area, bg='#dce2ea', highlightthickness=0)
-        self.canvas.grid(row=0, column=0, sticky='nsew')
-        vs = ttk.Scrollbar(area, orient='vertical', command=lambda *args: self.scroll_view('y', *args))
-        hs = ttk.Scrollbar(area, orient='horizontal', command=lambda *args: self.scroll_view('x', *args))
-        vs.grid(row=0, column=1, sticky='ns')
-        hs.grid(row=1, column=0, sticky='ew')
-        self.canvas.configure(yscrollcommand=vs.set, xscrollcommand=hs.set)
-        self.canvas.create_text(390, 230, text='拖入 PDF，开始编辑\n\n也可以点击左上角“打开 PDF”',
-                                fill='#59677b', font=('Microsoft YaHei UI', 20), justify='center')
-        self.status = tk.StringVar(value='文件仅在本机处理。原文件不会自动覆盖。')
-        ttk.Label(root, textvariable=self.status, padding=10).pack(fill='x')
-        self.canvas.bind('<ButtonPress-1>', self.press)
-        self.canvas.bind('<B1-Motion>', self.drag)
-        self.canvas.bind('<ButtonRelease-1>', self.release)
-        self.canvas.bind('<MouseWheel>', self.wheel_zoom)
-        self.canvas.bind('<Shift-MouseWheel>', self.wheel_scroll)
-        self.canvas.bind('<Motion>', self.hover)
-        root.bind('<Control-o>', lambda e: self.open())
-        root.bind('<Control-s>', lambda e: self.save())
-        root.bind('<Control-z>', self.shortcut_undo)
-        root.bind('<Escape>', lambda e: self.cancel_preview())
-        root.bind('<Control-Return>', lambda e: self.apply_preview())
-        for key, dx, dy in [('Left', -1, 0), ('Right', 1, 0), ('Up', 0, -1), ('Down', 0, 1)]:
-            self.canvas.bind('<' + key + '>', lambda e, x=dx, y=dy: self.nudge(x, y))
-            self.canvas.bind('<Shift-' + key + '>', lambda e, x=dx, y=dy: self.nudge(x * 10, y * 10))
-        self.canvas.bind('<Configure>', self.on_resize)
-        if hasattr(root, 'drop_target_register') and hasattr(root, 'TkdndVersion'):
-            for widget in (root, self.canvas):
-                widget.drop_target_register(DND_FILES)
-                widget.dnd_bind('<<Drop>>', self.drop_file)
-
-        root.protocol('WM_DELETE_WINDOW', self.close)
-
-    def build_panel(self, parent):
-        ui_scale = max(1, float(self.root.tk.call('tk', 'scaling')) / (96 / 72))
-        panel_width = int(290 * ui_scale)
-        outer = ttk.Frame(parent, width=panel_width)
-        outer.pack(side='right', fill='y')
-        outer.pack_propagate(False)
-        footer = ttk.Frame(outer, padding=(12, 8))
-        footer.pack(side='bottom', fill='x')
-        scroller = ttk.Frame(outer)
-        scroller.pack(fill='both', expand=True)
-        self.panel_canvas = tk.Canvas(scroller, highlightthickness=0, width=panel_width - 20,
-                                      background=ttk.Style().lookup('TFrame', 'background') or '#f0f0f0')
-        bar = ttk.Scrollbar(scroller, orient='vertical', command=self.panel_canvas.yview)
-        bar.pack(side='right', fill='y')
-        self.panel_canvas.pack(side='left', fill='both', expand=True)
-        self.panel_canvas.configure(yscrollcommand=bar.set)
-        panel = ttk.Frame(self.panel_canvas, padding=(12, 10))
-        panel_window = self.panel_canvas.create_window(0, 0, window=panel, anchor='nw')
-        panel.bind('<Configure>', lambda e: self.panel_canvas.configure(scrollregion=self.panel_canvas.bbox('all')))
-        self.panel_canvas.bind('<Configure>', lambda e: self.panel_canvas.itemconfigure(panel_window, width=e.width))
-        self.panel_canvas.bind('<MouseWheel>', lambda e: self.panel_canvas.yview_scroll(-int(e.delta / 120) * 3, 'units'))
-        ttk.Label(panel, text='文字属性', font=('Microsoft YaHei UI', 13, 'bold')).pack(anchor='w')
-        ttk.Label(panel, text='输入文字 → 点击定位 → 应用', padding=(0, 8)).pack(anchor='w')
-        self.text_input = tk.Text(panel, height=4, wrap='word', undo=True, relief='solid', borderwidth=1)
-        self.text_input.pack(fill='x')
-        self.text_input.bind('<<Modified>>', self.text_changed)
-        ttk.Label(panel, text='字体', padding=(0, 10, 0, 4)).pack(anchor='w')
-        self.font_name = tk.StringVar(value=next(iter(self.fonts), '内置宋体'))
-        self.font_combo = ttk.Combobox(panel, textvariable=self.font_name, state='readonly',
-                                      values=list(self.fonts) or ['内置宋体'])
-        self.font_combo.pack(fill='x')
-        ttk.Button(panel, text='选择字体文件…', command=self.import_font).pack(fill='x', pady=5)
-        line = ttk.Frame(panel)
-        line.pack(fill='x', pady=6)
-        ttk.Label(line, text='字号 (pt)').pack(side='left')
-        self.size = tk.StringVar(value='14')
-        ttk.Spinbox(line, from_=6, to=96, width=5, textvariable=self.size).pack(side='left', padx=8)
-        self.color_button = ttk.Button(line, text='颜色 ■', command=self.choose_color)
-        self.color_button.pack(side='right')
-        self.bold = tk.BooleanVar(value=False)
-        ttk.Checkbutton(panel, text='B  加粗', variable=self.bold, command=self.queue_preview).pack(anchor='w', pady=(2, 4))
-        ttk.Separator(panel).pack(fill='x', pady=10)
-        ttk.Label(panel, text='位置与文字框 (pt)').pack(anchor='w')
-        self.coords = {}
-        position_grid = ttk.Frame(panel)
-        position_grid.pack(fill='x', pady=4)
-        position_grid.columnconfigure(1, weight=1)
-        position_grid.columnconfigure(3, weight=1)
-        for i, (key, label, value) in enumerate([('x', 'X', '40'), ('y', 'Y', '40'),
-                                                ('width', '宽', '260'), ('height', '高', '100')]):
-            row, col = divmod(i, 2)
-            ttk.Label(position_grid, text=label).grid(row=row, column=col * 2, padx=(0, 5), pady=4)
-            var = tk.StringVar(value=value)
-            self.coords[key] = var
-            ttk.Spinbox(position_grid, from_=0, to=20000, increment=1, textvariable=var, width=7).grid(
-                row=row, column=col * 2 + 1, sticky='ew', padx=(0, 8), pady=4)
-            var.trace_add('write', self.queue_preview)
-        self.preview_message = tk.StringVar(value='点击页面放置文字框。')
-        ttk.Label(footer, textvariable=self.preview_message, wraplength=panel_width - 45, padding=(0, 8)).pack(fill='x')
-        actions = ttk.Frame(footer)
-        actions.pack(fill='x')
-        self.apply_button = ttk.Button(actions, text='应用 Ctrl+Enter', command=self.apply_preview, state='disabled')
-        self.apply_button.pack(side='left', fill='x', expand=True)
-        ttk.Button(actions, text='取消 Esc', command=self.cancel_preview).pack(side='left', padx=(6, 0))
-        ttk.Label(footer, text='框内拖动，边角拉伸；滚轮缩放。\nShift + 滚轮滚动页面。',
-                  wraplength=panel_width - 40, foreground='#59677b').pack(fill='x', pady=8)
-        self.size.trace_add('write', self.queue_preview)
-        self.font_name.trace_add('write', self.queue_preview)
-
-    def text_changed(self, event=None):
-        if self.text_input.edit_modified():
-            self.text_input.edit_modified(False)
-            self.queue_preview()
-
-    def shortcut_undo(self, event):
-        if event.widget is not self.text_input:
-            self.undo()
-            return 'break'
-
-    def import_font(self):
-        path = filedialog.askopenfilename(filetypes=[('字体文件', '*.ttf *.otf *.ttc')])
-        if path:
+    def read(self):
+        self.buffer.extend(bytes(self.process.readAllStandardOutput()))
+        while b'\n' in self.buffer:
+            line, _, rest = self.buffer.partition(b'\n')
+            self.buffer = bytearray(rest)
             try:
-                font = load_font(path)
-                name = font.name + ' · ' + Path(path).name
-                self.fonts[name] = path
-                self.font_combo.configure(values=list(self.fonts))
-                self.font_name.set(name)
-            except Exception as exc:
-                messagebox.showerror('字体无法使用', str(exc))
-
-    def drop_file(self, event):
-        paths = self.root.tk.splitlist(event.data)
-        if len(paths) != 1 or Path(paths[0]).suffix.lower() != '.pdf' or not Path(paths[0]).is_file():
-            messagebox.showinfo('拖入 PDF', '请每次拖入一个 PDF 文件。')
-            return 'refuse_drop'
-        self.open(paths[0])
-        return 'copy'
-
-    def change_mode(self):
-        if self.mode.get() != 'add':
-            self.cancel_preview()
-        self.hint()
-
-    def hint(self):
-        self.canvas.configure(cursor='crosshair' if self.mode.get() == 'add' else 'tcross')
-        self.status.set('框内拖动定位，四边和四角调整大小；滚轮缩放，Shift + 滚轮滚动页面。' if self.mode.get() == 'add'
-                        else '拖动框选需要删除的文字；与选框相交的字符会被删除。Ctrl+Z 撤销。')
-
-    def queue_preview(self, *args):
-        if self.drag_state is not None and self.preview_job:
-            return
-        if self.preview_job:
-            self.root.after_cancel(self.preview_job)
-        self.preview_job = self.root.after(60 if self.drag_state is not None else 180, self.refresh_preview)
-
-    def preview_args(self):
-        coords = {key: float(var.get()) for key, var in self.coords.items()}
-        size = float(self.size.get())
-        if not 6 <= size <= 96:
-            raise ValueError('字号应在 6 到 96 pt 之间。')
-        text = self.text_input.get('1.0', 'end-1c')
-        if not text.strip():
-            raise ValueError('请在右侧输入文字。')
-        return dict(**coords, text=text, size=size, color=self.color,
-                    fontfile=self.fonts.get(self.font_name.get()), bold=self.bold.get())
-
-    def refresh_preview(self):
-        self.preview_job = None
-        if self.doc:
-            self.render()
-
-    def cancel_preview(self):
-        self.anchor = None
-        self.drag_state = None
-        if self.preview_job:
-            self.root.after_cancel(self.preview_job)
-            self.preview_job = None
-        self.preview_valid = False
-        self.apply_button.configure(state='disabled')
-        self.preview_message.set('点击页面放置文字框。')
-        if self.doc:
-            self.render()
-
-    def apply_preview(self):
-        if not self.doc or self.anchor is None:
-            return
-        try:
-            args = self.preview_args()
-        except (ValueError, TypeError) as exc:
-            messagebox.showerror('请检查文字设置', str(exc))
-            return
-        if self.edit(lambda page: add_text(page, **args)):
-            self.cancel_preview()
-            self.status.set('文字已添加。可继续添加，或另存为 PDF。')
-
-    def nudge(self, dx, dy):
-        if self.anchor is not None:
-            try:
-                self.coords['x'].set(f"{float(self.coords['x'].get()) + dx:.1f}")
-                self.coords['y'].set(f"{float(self.coords['y'].get()) + dy:.1f}")
+                response = json.loads(line)
             except ValueError:
-                pass
-        return 'break'
+                self.failure('PDF 进程返回了无效数据。')
+                continue
+            request, self.active = self.active, None
+            if not self.stopping and request and response.get('id') == request['id']:
+                response['request'] = request
+                self.result.emit(response)
+            self.dispatch()
 
-    def on_resize(self, event=None):
-        if self.resize_job:
-            self.root.after_cancel(self.resize_job)
-        self.resize_job = self.root.after(200, self.resize_view)
+    def close(self):
+        self.stopping = True
+        self.process.closeWriteChannel()
+        if not self.process.waitForFinished(400):
+            self.process.kill()
+            self.process.waitForFinished(1000)
 
-    def resize_view(self):
-        self.resize_job = None
-        if self.doc:
-            if self.fit_mode:
-                self.fit_page()
-            else:
-                self.render()
 
-    def fit_page(self):
-        if self.doc:
-            rect = self.doc[self.index].rect
-            self.zoom = max(0.1, min((self.canvas.winfo_width() - 48) / rect.width,
-                                    (self.canvas.winfo_height() - 48) / rect.height, 3))
-            self.fit_mode = True
-            self.render()
-            self.canvas.xview_moveto(0)
-            self.canvas.yview_moveto(0)
+def decode_pixmap(data):
+    image = QImage.fromData(base64.b64decode(data), 'PNG')
+    if image.isNull():
+        raise ValueError('预览图像解码失败。')
+    return QPixmap.fromImage(image)
 
-    def discard(self):
-        return not (self.dirty or self.anchor is not None) or messagebox.askyesno('未保存的修改', '有未保存的修改或文字预览，是否放弃？')
 
-    def open(self, path=None):
-        if not self.discard():
-            return
-        path = path or filedialog.askopenfilename(filetypes=[('PDF 文件', '*.pdf')])
-        if not path:
-            return
-        candidate = None
-        try:
-            candidate = fitz.open(path)
-            if candidate.needs_pass:
-                password = simpledialog.askstring('加密文件', '请输入 PDF 密码：', show='*')
-                if password is None or not candidate.authenticate(password):
-                    raise ValueError('未提供正确密码。')
-            if not candidate.page_count:
-                raise ValueError('文件没有可显示的页面。')
-            if self.doc:
-                self.doc.close()
-            self.doc, candidate = candidate, None
-            self.path = Path(path)
-            self.index, self.history, self.dirty = 0, [], False
-            self.anchor = None
-            self.fit_page()
-            self.render()
-            self.hint()
-        except Exception as exc:
-            messagebox.showerror('打开失败', str(exc))
-        finally:
-            if candidate is not None:
-                candidate.close()
+class Draft(QGraphicsObject):
+    changed = Signal(bool)
 
-    def content_key(self):
-        page = self.doc[self.index]
-        preview = None
-        if self.anchor is not None and self.mode.get() == 'add':
-            preview = (tuple(v.get() for v in self.coords.values()), self.text_input.get('1.0', 'end-1c'),
-                       self.size.get(), self.fonts.get(self.font_name.get()), self.color, self.bold.get())
-        return (self.doc, self.revision, self.index, page.rotation, tuple(page.cropbox), preview)
+    def __init__(self, editor, width=260, height=90):
+        super().__init__()
+        self.editor = editor
+        self.w, self.h = width, height
+        self.offset = editor.size.value() * 1.1
+        self.pixmap = None
+        self.valid = False
+        self.gesture = None
+        self.setZValue(20)
+        self.setAcceptHoverEvents(True)
+        self.setFlag(self.GraphicsItemFlag.ItemIsFocusable)
 
-    def prepare_display(self, key):
-        if self.display_key == key:
-            return
-        page = self.doc[self.index]
-        preview_doc = None
-        self.preview_valid = False
-        self.apply_button.configure(state='disabled')
-        try:
-            if self.anchor is not None and self.mode.get() == 'add':
-                try:
-                    args = self.preview_args()
-                    preview_doc = fitz.open()
-                    preview_doc.insert_pdf(self.doc, from_page=self.index, to_page=self.index)
-                    add_text(preview_doc[0], **args)
-                    page = preview_doc[0]
-                    self.preview_valid = True
-                    self.apply_button.configure(state='normal')
-                    self.preview_message.set('实际排版预览；拖动蓝框后点击应用。')
-                except (ValueError, TypeError, RuntimeError) as exc:
-                    self.preview_message.set(str(exc) or '请输入有效的位置和文字框尺寸。')
-            self.display_list = page.get_displaylist()
-            self.display_key = key
-        finally:
-            if preview_doc is not None:
-                preview_doc.close()
+    def boundingRect(self):
+        return QRectF(-64, -64, self.w + 128, self.h + 128)
 
-    def render(self, fast=False, focus=None):
-        if self.zoom_job:
-            self.root.after_cancel(self.zoom_job)
-            self.zoom_job = None
-        page = self.doc[self.index]
-        effective = min(self.zoom, (20_000_000 / (page.rect.width * page.rect.height)) ** 0.5)
-        self.render_zoom = effective
-        key = self.content_key()
-        self.prepare_display(key)
-        width, height = math.ceil(page.rect.width * effective), math.ceil(page.rect.height * effective)
-        ox = max(20, (self.canvas.winfo_width() - width) / 2)
-        oy = max(20, (self.canvas.winfo_height() - height) / 2)
-        self.origin = (ox, oy)
-        total_w = max(width + 40, self.canvas.winfo_width())
-        total_h = max(height + 40, self.canvas.winfo_height())
-        self.canvas.configure(scrollregion=(0, 0, total_w, total_h))
-        if focus is not None:
-            point, x, y = focus
-            self.canvas.xview_moveto((ox + point[0] * effective - x) / total_w)
-            self.canvas.yview_moveto((oy + point[1] * effective - y) / total_h)
-        quick = fast and self.sharp_key == key and self.sharp_image is not None
-        image_x, image_y = ox, oy
-        if quick:
-            # Scale only the visible part, so 400% zoom does not allocate a full-page bitmap per wheel tick.
-            x0 = max(0, min(width - 1, math.floor(self.canvas.canvasx(0) - ox)))
-            y0 = max(0, min(height - 1, math.floor(self.canvas.canvasy(0) - oy)))
-            x1 = min(width, max(x0 + 1, math.ceil(self.canvas.canvasx(self.canvas.winfo_width()) - ox)))
-            y1 = min(height, max(y0 + 1, math.ceil(self.canvas.canvasy(self.canvas.winfo_height()) - oy)))
-            sx, sy = self.sharp_image.width / width, self.sharp_image.height / height
-            image = self.sharp_image.transform((x1 - x0, y1 - y0), Image.Transform.EXTENT,
-                                               (x0 * sx, y0 * sy, x1 * sx, y1 * sy),
-                                               resample=Image.Resampling.BILINEAR)
-            image_x, image_y = ox + x0, oy + y0
-        else:
-            if self.sharp_key != key or self.sharp_zoom != effective:
-                pix = self.display_list.get_pixmap(matrix=fitz.Matrix(effective, effective), alpha=False)
-                self.sharp_image = Image.frombytes('RGB', (pix.width, pix.height), pix.samples)
-                self.sharp_key, self.sharp_zoom = key, effective
-            image = self.sharp_image
-        self.photo = ImageTk.PhotoImage(image)
-        self.canvas.delete('all')
-        self.canvas.create_rectangle(ox + 4, oy + 4, ox + width + 4, oy + height + 4,
-                                     fill='#bcc4cf', outline='')
-        self.canvas.create_image(image_x, image_y, image=self.photo, anchor='nw')
-        self.draw_box()
-        self.page_label.configure(text=f'第 {self.index + 1} / {len(self.doc)} 页')
-        self.zoom_label.configure(text=f'{effective:.0%}')
-        self.root.title(f'{"* " if self.dirty else ""}{self.path.name} · 轻简 PDF')
-        if quick:
-            self.zoom_job = self.root.after(150, self.finish_zoom)
+    def handles(self):
+        return {'nw': (0, 0), 'n': (self.w / 2, 0), 'ne': (self.w, 0), 'e': (self.w, self.h / 2),
+                'se': (self.w, self.h), 's': (self.w / 2, self.h), 'sw': (0, self.h), 'w': (0, self.h / 2)}
 
-    def finish_zoom(self):
-        if self.zoom_job:
-            self.root.after_cancel(self.zoom_job)
-            self.zoom_job = None
-        if self.doc:
-            self.render()
-
-    def scroll_view(self, axis, *args):
-        if self.zoom_job:
-            self.finish_zoom()
-        (self.canvas.xview if axis == 'x' else self.canvas.yview)(*args)
-
-    def point(self, event):
-        return ((self.canvas.canvasx(event.x) - self.origin[0]) / self.render_zoom,
-                (self.canvas.canvasy(event.y) - self.origin[1]) / self.render_zoom)
-
-    def box_values(self):
-        return tuple(float(self.coords[k].get()) for k in ('x', 'y', 'width', 'height'))
-
-    @staticmethod
-    def handles(box):
-        x, y, w, h = box
-        return {'nw': (x, y), 'n': (x + w / 2, y), 'ne': (x + w, y),
-                'e': (x + w, y + h / 2), 'se': (x + w, y + h),
-                's': (x + w / 2, y + h), 'sw': (x, y + h), 'w': (x, y + h / 2)}
-
-    def draw_box(self):
-        self.canvas.delete('preview')
-        if self.anchor is None or self.mode.get() != 'add':
-            return
-        try:
-            box = self.box_values()
-        except ValueError:
-            return
-        x, y, w, h = box
-        ox, oy = self.origin
-        z = self.render_zoom
-        color = '#0078d4' if self.preview_valid else '#d83b01'
-        self.canvas.create_rectangle(ox + x * z, oy + y * z, ox + (x + w) * z, oy + (y + h) * z,
-                                     outline=color, width=2, dash=(5, 3), tags='preview')
-        self.canvas.create_text(ox + x * z, oy + y * z - 10,
-                                text='框内拖动 · 边角调整大小', anchor='sw', fill=color, tags='preview')
-        radius = self.handle_radius()
-        for name, (hx, hy) in self.handles(box).items():
-            cx, cy = ox + hx * z, oy + hy * z
-            self.canvas.create_rectangle(cx - radius, cy - radius, cx + radius, cy + radius,
-                                         outline=color, fill='white', width=2, tags=('preview', 'handle-' + name))
-
-    def handle_radius(self):
-        return 4 * max(1, float(self.root.tk.call('tk', 'scaling')) / (96 / 72))
-
-    def hit_box(self, point):
-        if self.anchor is None or self.mode.get() != 'add':
-            return None
-        try:
-            box = self.box_values()
-        except ValueError:
-            return None
-        x, y = point
-        tolerance = (self.handle_radius() + 3) / self.render_zoom
-        # Corners take priority when a box is small on screen.
-        positions = self.handles(box)
+    def hit(self, point):
+        tolerance = 7 / self.editor.view.zoom
+        positions = self.handles()
         for name in ('nw', 'ne', 'se', 'sw', 'n', 'e', 's', 'w'):
-            hx, hy = positions[name]
-            if abs(x - hx) <= tolerance and abs(y - hy) <= tolerance:
+            x, y = positions[name]
+            if abs(point.x() - x) <= tolerance and abs(point.y() - y) <= tolerance:
                 return name
-        bx, by, w, h = box
-        if bx <= x <= bx + w and by <= y <= by + h:
+        if QRectF(0, 0, self.w, self.h).contains(point):
             return 'move'
         return None
 
-    def hover(self, event):
-        if not self.doc or self.drag_state is not None:
-            return
-        hit = self.hit_box(self.point(event))
-        cursors = {'move': 'fleur', 'nw': 'size_nw_se', 'se': 'size_nw_se',
-                   'ne': 'size_ne_sw', 'sw': 'size_ne_sw', 'n': 'sb_v_double_arrow',
-                   's': 'sb_v_double_arrow', 'e': 'sb_h_double_arrow', 'w': 'sb_h_double_arrow'}
-        cursor = cursors.get(hit, 'crosshair' if self.mode.get() == 'add' else 'tcross')
-        try:
-            self.canvas.configure(cursor=cursor)
-        except tk.TclError:
-            self.canvas.configure(cursor='fleur' if hit else 'crosshair')
+    def paint(self, painter, option, widget=None):
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        if self.pixmap is not None:
+            painter.drawPixmap(QRectF(0, 0, self.w, self.h), self.pixmap, QRectF(self.pixmap.rect()))
+        color = QColor('#0078d4' if self.valid else '#b85c00')
+        pen = QPen(color, 1, Qt.PenStyle.DashLine)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(QRectF(0, 0, self.w, self.h))
+        painter.drawLine(QPointF(0, self.offset), QPointF(self.w, self.offset))
+        pen.setStyle(Qt.PenStyle.SolidLine)
+        painter.setPen(pen)
+        painter.setBrush(Qt.GlobalColor.white)
+        radius = 4 / self.editor.view.zoom
+        for x, y in self.handles().values():
+            painter.drawRect(QRectF(x - radius, y - radius, radius * 2, radius * 2))
 
-    def set_box(self, box):
-        for key, value in zip(('x', 'y', 'width', 'height'), box):
-            # Preserve enough precision at fractional PDF page boundaries.
-            self.coords[key].set(f'{value:.6f}'.rstrip('0').rstrip('.') or '0')
+    def hoverMoveEvent(self, event):
+        hit = self.hit(event.pos())
+        cursors = {'move': Qt.CursorShape.SizeAllCursor, 'nw': Qt.CursorShape.SizeFDiagCursor,
+                   'se': Qt.CursorShape.SizeFDiagCursor, 'ne': Qt.CursorShape.SizeBDiagCursor,
+                   'sw': Qt.CursorShape.SizeBDiagCursor, 'n': Qt.CursorShape.SizeVerCursor,
+                   's': Qt.CursorShape.SizeVerCursor, 'e': Qt.CursorShape.SizeHorCursor,
+                   'w': Qt.CursorShape.SizeHorCursor}
+        self.setCursor(cursors.get(hit, Qt.CursorShape.CrossCursor))
 
-    def press(self, event):
-        if not self.doc:
+    def mousePressEvent(self, event):
+        hit = self.hit(event.pos())
+        if event.button() != Qt.MouseButton.LeftButton or not hit:
+            event.ignore()
             return
-        if self.zoom_job:
-            self.finish_zoom()
-        point = self.point(event)
-        hit = self.hit_box(point)
-        # Border handles can extend a few pixels beyond the page.
-        if not hit and not self.doc[self.index].rect.contains(fitz.Point(point)):
+        self.gesture = (hit, event.scenePos(), self.pos(), self.w, self.h)
+        self.setFocus()
+        event.accept()
+
+    def resize_box(self, width, height):
+        self.prepareGeometryChange()
+        self.w, self.h = width, height
+        self.valid = False
+        self.pixmap = None
+        self.update()
+
+    def mouseMoveEvent(self, event):
+        if not self.gesture:
             return
-        self.canvas.focus_set()
-        if self.mode.get() == 'add':
-            if hit:
-                self.drag_state = (hit, point, self.box_values())
+        kind, start, position, width, height = self.gesture
+        delta = event.scenePos() - start
+        x, y = position.x(), position.y()
+        right, bottom = x + width, y + height
+        bounds = self.editor.page_rect
+        if kind == 'move':
+            x, y = x + delta.x(), y + delta.y()
+            if self.editor.snap.isChecked() and not event.modifiers() & Qt.KeyboardModifier.AltModifier:
+                x, y, guides = snap_box(x, y, width, height, self.offset, self.editor.spans, 7 / self.editor.view.zoom)
+                self.editor.draw_guides(guides)
             else:
-                x, y = point
-                rect = self.doc[self.index].rect
-                try:
-                    _, _, w, h = self.box_values()
-                except ValueError:
-                    w, h = 260, 100
-                w, h = min(max(12, w), rect.width), min(max(12, h), rect.height)
-                x, y = min(x, rect.width - w), min(y, rect.height - h)
-                self.anchor = (x, y)
-                box = (x, y, w, h)
-                self.drag_state = ('move', point, box)
-                self.set_box(box)
-                self.draw_box()
+                self.editor.draw_guides([])
+            x, y = max(0, min(x, bounds.width() - width)), max(0, min(y, bounds.height() - height))
+            self.setPos(x, y)
         else:
-            self.start = point
+            if 'w' in kind:
+                x = max(0, min(x + delta.x(), right - 12))
+            if 'e' in kind:
+                right = min(bounds.width(), max(x + 12, right + delta.x()))
+            if 'n' in kind:
+                y = max(0, min(y + delta.y(), bottom - 12))
+            if 's' in kind:
+                bottom = min(bounds.height(), max(y + 12, bottom + delta.y()))
+            self.setPos(x, y)
+            self.resize_box(right - x, bottom - y)
+        self.changed.emit(kind != 'move')
+        event.accept()
 
-    def drag(self, event):
-        if self.mode.get() == 'add' and self.drag_state is not None:
-            kind, start, box = self.drag_state
-            px, py = self.point(event)
-            dx, dy = px - start[0], py - start[1]
-            x, y, w, h = box
-            rect = self.doc[self.index].rect
-            if kind == 'move':
-                x = max(0, min(x + dx, max(0, rect.width - w)))
-                y = max(0, min(y + dy, max(0, rect.height - h)))
-            else:
-                right, bottom = x + w, y + h
-                if 'w' in kind:
-                    x = max(0, min(x + dx, right - 12))
-                if 'e' in kind:
-                    right = min(rect.width, max(x + 12, right + dx))
-                if 'n' in kind:
-                    y = max(0, min(y + dy, bottom - 12))
-                if 's' in kind:
-                    bottom = min(rect.height, max(y + 12, bottom + dy))
-                w, h = right - x, bottom - y
-            self.set_box((x, y, w, h))
-            self.draw_box()
+    def mouseReleaseEvent(self, event):
+        if self.gesture:
+            self.mouseMoveEvent(event)
+            self.gesture = None
+            self.changed.emit(False)
+        event.accept()
+
+    def mouseDoubleClickEvent(self, event):
+        self.editor.text_input.setFocus()
+        event.accept()
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and not self.editor.busy:
+            self.editor.cancel()
+            self.editor.statusBar().showMessage('已删除待添加的文字框。', 4000)
+            event.accept()
             return
-        if self.start is None:
+        directions = {Qt.Key.Key_Left: (-1, 0), Qt.Key.Key_Right: (1, 0), Qt.Key.Key_Up: (0, -1), Qt.Key.Key_Down: (0, 1)}
+        if event.key() in directions:
+            step = 10 if event.modifiers() & Qt.KeyboardModifier.ShiftModifier else 1
+            dx, dy = directions[event.key()]
+            x = max(0, min(self.x() + dx * step, self.editor.page_rect.width() - self.w))
+            y = max(0, min(self.y() + dy * step, self.editor.page_rect.height() - self.h))
+            self.setPos(x, y)
+            self.editor.draw_guides([])
+            self.changed.emit(False)
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
+
+class PdfView(QGraphicsView):
+    viewport_changed = Signal()
+
+    def __init__(self, editor):
+        super().__init__()
+        self.editor = editor
+        self.zoom = 1.0
+        self.pan = None
+        self.selection_start = None
+        self.selection = None
+        self.erase_hover = None
+        self.setMouseTracking(True)
+        self.setScene(QGraphicsScene(self))
+        self.setBackgroundBrush(QColor('#d9dfe7'))
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        self.setViewportUpdateMode(self.ViewportUpdateMode.MinimalViewportUpdate)
+        self.setTransformationAnchor(self.ViewportAnchor.NoAnchor)
+        self.setResizeAnchor(self.ViewportAnchor.AnchorViewCenter)
+        self.setAcceptDrops(True)
+        self.horizontalScrollBar().valueChanged.connect(self.viewport_changed)
+        self.verticalScrollBar().valueChanged.connect(self.viewport_changed)
+
+    def set_zoom(self, value, anchor=None):
+        if not self.editor.path:
             return
-        self.canvas.delete('selection')
-        x, y = self.start
-        self.canvas.create_rectangle(x * self.render_zoom + self.origin[0], y * self.render_zoom + self.origin[1],
-                                     self.canvas.canvasx(event.x), self.canvas.canvasy(event.y),
-                                     outline='#e34b55', width=2, dash=(4, 3), tags='selection')
+        value = max(0.2, min(6, value))
+        point = anchor or self.viewport().rect().center()
+        before = self.mapToScene(point)
+        self.scale(value / self.zoom, value / self.zoom)
+        self.zoom = value
+        after = self.mapToScene(point)
+        delta = after - before
+        self.translate(delta.x(), delta.y())
+        self.editor.zoom_label.setText(f'{value:.0%}')
+        if self.editor.draft:
+            self.editor.draft.update()
+        self.viewport_changed.emit()
 
-    def release(self, event):
-        if self.drag_state is not None:
-            self.drag(event)
-            self.drag_state = None
-            if self.preview_job:
-                self.root.after_cancel(self.preview_job)
-                self.preview_job = None
-            self.render()
-            self.hover(event)
+    def wheelEvent(self, event):
+        if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - event.angleDelta().y())
+        else:
+            delta = event.angleDelta().y() or event.pixelDelta().y() * 3
+            self.set_zoom(self.zoom * 1.12 ** (max(-480, min(480, delta)) / 120), event.position().toPoint())
+        event.accept()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.viewport_changed.emit()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.MiddleButton:
+            self.pan = event.position()
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
             return
-        if self.start is None:
+        point = self.mapToScene(event.position().toPoint())
+        draft = self.editor.draft
+        if event.button() == Qt.MouseButton.LeftButton and draft and draft.hit(draft.mapFromScene(point)):
+            super().mousePressEvent(event)
             return
-        x, y = self.start
-        x2, y2 = self.point(event)
-        self.start = None
-        self.canvas.delete('selection')
-        rect = fitz.Rect(min(x, x2), min(y, y2), max(x, x2), max(y, y2)) & self.doc[self.index].rect
-        if rect.width > 2 and rect.height > 2:
-            self.edit(lambda p: delete_text(p, rect))
-
-    def zoom_at(self, zoom, x, y):
-        if not self.doc or self.drag_state is not None or self.start is not None:
+        if event.button() == Qt.MouseButton.LeftButton and not self.editor.busy and self.editor.page_rect.contains(point):
+            mode = self.editor.mode.currentData()
+            if mode == 'sample':
+                self.editor.sample(point)
+            elif mode == 'add':
+                self.editor.place(point)
+            elif mode == 'erase':
+                span = nearest_span(point.x(), point.y(), self.editor.spans, 3 / self.zoom)
+                if span:
+                    x0, y0, x1, y1 = span['bbox']
+                    self.editor.delete_selection(QRectF(x0, y0, x1 - x0, y1 - y0))
+                else:
+                    self.editor.statusBar().showMessage('此处没有可删除的文字；扫描件中的图片文字不支持直接删除。', 5000)
+            elif mode == 'delete':
+                self.selection_start = point
+                pen = QPen(QColor('#d83b01'), 1, Qt.PenStyle.DashLine)
+                pen.setCosmetic(True)
+                self.selection = self.scene().addRect(QRectF(point, point), pen)
+                self.selection.setZValue(30)
+            elif mode == 'pan':
+                self.pan = event.position()
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
             return
-        point = self.point(type('Pointer', (), {'x': x, 'y': y})())
-        page = self.doc[self.index].rect
-        limit = min(4, (20_000_000 / (page.width * page.height)) ** 0.5)
-        self.zoom = min(limit, max(min(0.1, limit), zoom))
-        self.fit_mode = False
-        self.render(fast=True, focus=(point, x, y))
+        super().mousePressEvent(event)
 
-    def wheel_zoom(self, event):
-        if self.doc and event.delta:
-            steps = max(-4, min(4, event.delta / 120))
-            self.zoom_at(self.render_zoom * (1.12 ** steps), event.x, event.y)
-        return 'break'
+    def clear_erase_hover(self):
+        if self.erase_hover is not None:
+            self.scene().removeItem(self.erase_hover)
+            self.erase_hover = None
 
-    def wheel_scroll(self, event):
-        if self.zoom_job:
-            self.finish_zoom()
-        if self.doc and self.drag_state is None and self.start is None:
-            if event.delta:
-                direction = -1 if event.delta > 0 else 1
-                self.canvas.yview_scroll(direction * max(1, round(abs(event.delta) / 120)) * 3, 'units')
-        return 'break'
+    def mouseMoveEvent(self, event):
+        if self.editor.mode.currentData() == 'erase' and not self.editor.busy:
+            point = self.mapToScene(event.position().toPoint())
+            span = nearest_span(point.x(), point.y(), self.editor.spans, 3 / self.zoom)
+            self.clear_erase_hover()
+            if span:
+                x0, y0, x1, y1 = span['bbox']
+                pen = QPen(QColor('#d83b01'), 1, Qt.PenStyle.DashLine)
+                pen.setCosmetic(True)
+                self.erase_hover = self.scene().addRect(QRectF(x0, y0, x1 - x0, y1 - y0), pen, QColor(216, 59, 1, 25))
+                self.erase_hover.setZValue(15)
+                self.erase_hover.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            return
+        if self.pan is not None:
+            delta = event.position() - self.pan
+            self.pan = event.position()
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - round(delta.x()))
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - round(delta.y()))
+            return
+        if self.selection_start is not None:
+            point = self.mapToScene(event.position().toPoint())
+            self.selection.setRect(QRectF(self.selection_start, point).normalized().intersected(self.editor.page_rect))
+            return
+        super().mouseMoveEvent(event)
 
-    def edit(self, operation):
-        before = self.doc.tobytes()
-        try:
-            operation(self.doc[self.index])
-        except Exception as exc:
-            self.doc.close()
-            self.doc = fitz.open(stream=before, filetype='pdf')
-            messagebox.showerror('未完成修改', str(exc))
+    def mouseReleaseEvent(self, event):
+        if self.pan is not None:
+            self.pan = None
+            self.unsetCursor()
+            return
+        if self.selection_start is not None:
+            rect = self.selection.rect()
+            self.scene().removeItem(self.selection)
+            self.selection, self.selection_start = None, None
+            if rect.width() > 2 and rect.height() > 2:
+                self.editor.delete_selection(rect)
+            return
+        super().mouseReleaseEvent(event)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        paths = [url.toLocalFile() for url in event.mimeData().urls()]
+        if len(paths) == 1 and Path(paths[0]).suffix.lower() == '.pdf':
+            self.editor.open_pdf(paths[0])
+            event.acceptProposedAction()
+        else:
+            self.editor.statusBar().showMessage('请每次拖入一个 PDF 文件。', 5000)
+
+
+class Editor(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle(f'轻简 PDF {__version__} · Qt 版 · 自用')
+        available = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(1280, available.width() - 60), min(860, available.height() - 60))
+        self.setMinimumSize(900, 640)
+        self.path = None
+        self.index = 0
+        self.count = 0
+        self.revision = 0
+        self.epoch = 0
+        self.busy = False
+        self.dirty = False
+        self.spans = []
+        self.page_rect = QRectF()
+        self.draft = None
+        self.guides = []
+        self.color = (0.0, 0.0, 0.0)
+        self.fonts = windows_fonts()
+        self.preview_version = 0
+        self.tile_cache = OrderedDict()
+        self.cache_bytes = 0
+        self.tile_items = {}
+        self.wanted = set()
+        self.tile_group = None
+        self.view = PdfView(self)
+        self.setCentralWidget(self.view)
+        self.tile_timer = QTimer(self)
+        self.tile_timer.setSingleShot(True)
+        self.tile_timer.setInterval(80)
+        self.tile_timer.timeout.connect(self.schedule_tiles)
+        self.preview_timer = QTimer(self)
+        self.preview_timer.setSingleShot(True)
+        self.preview_timer.setInterval(100)
+        self.preview_timer.timeout.connect(self.request_preview)
+        self.view.viewport_changed.connect(self.tile_timer.start)
+        self.build_toolbar()
+        self.build_panel()
+        self.client = PdfClient(self)
+        self.client.result.connect(self.on_result)
+        self.client.failed.connect(self.worker_failed)
+        self.statusBar().showMessage('拖入 PDF 开始。滚轮缩放，中键拖动平移；原文基线吸附已开启。')
+        welcome = self.view.scene().addText('拖入 PDF，开始编辑\n\n原文基线吸附 · 样式取样 · 独立进程渲染')
+        welcome.setDefaultTextColor(QColor('#526174'))
+        welcome.setPos(60, 70)
+
+    def action(self, toolbar, title, slot, shortcut=None):
+        action = QAction(title, self)
+        action.triggered.connect(slot)
+        if shortcut:
+            action.setShortcut(shortcut)
+        toolbar.addAction(action)
+        return action
+
+    def build_toolbar(self):
+        bar = QToolBar('文件与页面', self)
+        bar.setMovable(False)
+        self.addToolBar(bar)
+        self.open_action = self.action(bar, '打开 PDF', lambda: self.open_pdf(), 'Ctrl+O')
+        self.save_action = self.action(bar, '另存为', self.save, 'Ctrl+S')
+        self.undo_action = self.action(bar, '撤销', self.undo, 'Ctrl+Z')
+        bar.addSeparator()
+        self.prev_action = self.action(bar, '上一页', lambda: self.turn(-1))
+        self.page_label = QLabel('  尚未打开  ')
+        bar.addWidget(self.page_label)
+        self.next_action = self.action(bar, '下一页', lambda: self.turn(1))
+        self.action(bar, '适合页面', self.fit_page, 'Ctrl+0')
+        self.action(bar, '−', lambda: self.view.set_zoom(self.view.zoom / 1.2))
+        self.zoom_label = QLabel('100%')
+        bar.addWidget(self.zoom_label)
+        self.action(bar, '+', lambda: self.view.set_zoom(self.view.zoom * 1.2))
+        self.addToolBarBreak()
+        editing = QToolBar('编辑工具', self)
+        editing.setMovable(False)
+        self.addToolBar(editing)
+        editing.addWidget(QLabel('工具  '))
+        self.mode = QComboBox()
+        for label, value in [('添加文字', 'add'), ('框选删除', 'delete'), ('点选删除文字', 'erase'), ('取样原文样式', 'sample'), ('平移页面', 'pan')]:
+            self.mode.addItem(label, value)
+        self.mode.currentIndexChanged.connect(self.mode_changed)
+        editing.addWidget(self.mode)
+        self.action(editing, '框选删除', lambda: self.mode.setCurrentIndex(self.mode.findData('delete')))
+        self.action(editing, '点选删除', lambda: self.mode.setCurrentIndex(self.mode.findData('erase')))
+        self.snap = QCheckBox('吸附原文基线 / 边缘（Alt 暂停）')
+        self.snap.setChecked(True)
+        editing.addWidget(self.snap)
+        editing.addSeparator()
+        editing.addWidget(QLabel('滚轮缩放  ·  中键平移  ·  Shift+滚轮滚动'))
+
+    def build_panel(self):
+        dock = QDockWidget('文字属性', self)
+        dock.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
+        dock.setMinimumWidth(310)
+        body = QWidget()
+        layout = QVBoxLayout(body)
+        self.text_input = QPlainTextEdit()
+        self.text_input.setPlaceholderText('输入文字，再点击页面定位。\n也可先用“取样原文样式”。')
+        self.text_input.setMaximumHeight(145)
+        self.text_input.textChanged.connect(self.content_changed)
+        layout.addWidget(self.text_input)
+        form = QFormLayout()
+        self.font_combo = QComboBox()
+        self.font_combo.addItems(list(self.fonts) or ['内置宋体'])
+        self.font_combo.currentTextChanged.connect(self.content_changed)
+        form.addRow('字体', self.font_combo)
+        import_button = QPushButton('选择字体文件…')
+        import_button.clicked.connect(self.import_font)
+        form.addRow('', import_button)
+        self.size = QDoubleSpinBox()
+        self.size.setRange(6, 96)
+        self.size.setValue(14)
+        self.size.setSuffix(' pt')
+        self.size.valueChanged.connect(self.content_changed)
+        form.addRow('字号', self.size)
+        self.bold = QCheckBox('加粗')
+        self.bold.toggled.connect(self.content_changed)
+        form.addRow('', self.bold)
+        self.color_button = QPushButton('文字颜色  ■')
+        self.color_button.clicked.connect(self.choose_color)
+        form.addRow('颜色', self.color_button)
+        self.coords = {}
+        for key, label, value in [('x', '左侧 X', 40), ('baseline', '首行基线 Y', 60), ('width', '文字框宽', 260), ('height', '文字框高', 90)]:
+            field = QDoubleSpinBox()
+            field.setRange(0 if key in ('x', 'baseline') else 12, 20000)
+            field.setDecimals(2)
+            field.setValue(value)
+            field.setSuffix(' pt')
+            field.valueChanged.connect(lambda value, name=key: self.geometry_changed(name))
+            self.coords[key] = field
+            form.addRow(label, field)
+        layout.addLayout(form)
+        self.sample_label = QLabel('取样会读取原文字号、颜色、粗细和字体名称。')
+        self.sample_label.setWordWrap(True)
+        layout.addWidget(self.sample_label)
+        layout.addStretch()
+        self.preview_label = QLabel('点击页面放置文字；对齐时出现蓝色参考线。')
+        self.preview_label.setWordWrap(True)
+        layout.addWidget(self.preview_label)
+        self.apply_button = QPushButton('应用文字  Ctrl+Enter')
+        self.apply_button.setEnabled(False)
+        self.apply_button.clicked.connect(self.apply)
+        layout.addWidget(self.apply_button)
+        cancel = QPushButton('取消预览  Esc')
+        cancel.clicked.connect(self.cancel)
+        layout.addWidget(cancel)
+        hint = QLabel('框内拖动，边角调整大小。\n方向键微调，Shift+方向键移动 10 pt。\n虚线标示首行文字基线，不是文字框顶边。')
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(body)
+        dock.setWidget(scroll)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+        apply_action = QAction(self)
+        apply_action.setShortcut('Ctrl+Return')
+        apply_action.triggered.connect(self.apply)
+        self.addAction(apply_action)
+        cancel_action = QAction(self)
+        cancel_action.setShortcut('Esc')
+        cancel_action.triggered.connect(self.cancel)
+        self.addAction(cancel_action)
+        bold_action = QAction(self)
+        bold_action.setShortcut('Ctrl+B')
+        bold_action.triggered.connect(lambda: self.bold.setChecked(not self.bold.isChecked()))
+        self.addAction(bold_action)
+
+    def set_busy(self, value):
+        self.busy = value
+        for control in (self.open_action, self.save_action, self.undo_action, self.prev_action, self.next_action):
+            control.setEnabled(not value)
+        self.apply_button.setEnabled(not value and self.draft is not None and self.draft.valid)
+        if self.draft:
+            self.draft.setEnabled(not value)
+        for control in (self.text_input, self.font_combo, self.size, self.bold, *self.coords.values()):
+            control.setEnabled(not value)
+
+    def discard(self):
+        if self.busy:
+            self.statusBar().showMessage('正在处理文件，请稍后。', 5000)
             return False
-        self.history.append((before, self.index, self.dirty))
-        # Bound undo memory for larger documents.
-        while len(self.history) > 1 and (len(self.history) > 20 or sum(len(h[0]) for h in self.history) > 128_000_000):
-            self.history.pop(0)
-        self.dirty = True
-        self.revision += 1
-        self.render()
-        self.status.set('修改已应用，可 Ctrl+Z 撤销；点击“另存为”导出 PDF。')
+        if self.dirty or self.draft:
+            return QMessageBox.question(self, '未保存的修改', '是否放弃当前未保存的修改和文字预览？',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes
         return True
 
-    def undo(self):
-        if self.anchor is not None:
-            self.cancel_preview()
+    def open_pdf(self, path=None):
+        if not self.discard():
             return
-        if not self.history:
-            return
-        data, self.index, self.dirty = self.history.pop()
-        self.doc.close()
-        self.doc = fitz.open(stream=data, filetype='pdf')
-        self.render()
-        self.status.set('已撤销上一次修改。')
-
-    def save(self):
-        if not self.doc:
-            return
-        if self.anchor is not None:
-            if not messagebox.askyesno('文字尚未应用', '是否先应用当前文字，再保存？（选“否”返回编辑）'):
-                return
-            self.apply_preview()
-            if self.anchor is not None:
-                return
-        path = filedialog.asksaveasfilename(defaultextension='.pdf', initialfile=self.path.stem + '_已修改.pdf',
-                                          filetypes=[('PDF 文件', '*.pdf')])
+        if not path:
+            path, _ = QFileDialog.getOpenFileName(self, '打开 PDF', '', 'PDF (*.pdf)')
         if not path:
             return
-        if Path(path).resolve() == self.path.resolve():
-            messagebox.showinfo('保留原文件', '请选择另一个文件名，保留原始 PDF。')
+        self.epoch += 1
+        self.set_busy(True)
+        self.statusBar().showMessage('正在后台打开 PDF…')
+        self.client.command('open', path=str(path), epoch=self.epoch)
+
+    def worker_failed(self, message):
+        self.set_busy(False)
+        self.statusBar().showMessage(message)
+        self.apply_button.setEnabled(False)
+        QMessageBox.critical(self, 'PDF 进程错误', message)
+
+    def on_result(self, response):
+        request = response['request']
+        kind = request['kind']
+        if request.get('epoch') != self.epoch:
             return
-        temp = None
-        try:
-            fd, temp = tempfile.mkstemp(suffix='.pdf', dir=str(Path(path).parent))
-            os.close(fd)
-            self.doc.save(temp, garbage=4, deflate=True, encryption=fitz.PDF_ENCRYPT_KEEP)
-            os.replace(temp, path)
+        if 'error' in response:
+            if kind == 'preview':
+                if request.get('version') == self.preview_version and self.draft:
+                    self.draft.valid = False
+                    self.draft.pixmap = None
+                    self.draft.update()
+                    self.apply_button.setEnabled(False)
+                    self.preview_label.setText(response['error'])
+            elif kind == 'tile':
+                self.statusBar().showMessage('该区域渲染失败：' + response['error'], 6000)
+            else:
+                self.set_busy(False)
+                QMessageBox.warning(self, '操作未完成', response['error'])
+                if self.path and kind in ('insert', 'delete', 'undo', 'open'):
+                    self.client.command('page', index=self.index, epoch=self.epoch)
+            return
+        data = response['data']
+        if data.get('password_required'):
+            password, ok = QInputDialog.getText(self, '加密 PDF', '请输入密码：', QLineEdit.EchoMode.Password)
+            if ok:
+                self.client.command('open', path=request['path'], password=password, epoch=self.epoch)
+            else:
+                self.set_busy(False)
+            return
+        if kind in ('open', 'page', 'insert', 'delete', 'undo'):
+            self.load_page(data, fit=kind in ('open', 'page'))
+        elif kind == 'preview':
+            if self.draft and request['version'] == self.preview_version:
+                baseline = self.draft.y() + self.draft.offset
+                self.draft.offset = data['baseline_offset']
+                self.draft.setY(max(0, min(baseline - self.draft.offset, self.page_rect.height() - self.draft.h)))
+                self.draft.pixmap = decode_pixmap(data['image'])
+                self.draft.valid = True
+                self.draft.update()
+                self.sync_geometry()
+                self.apply_button.setEnabled(not self.busy)
+                self.preview_label.setText('实际 PDF 排版预览。蓝色虚线是首行基线。')
+        elif kind == 'tile' and not data.get('stale'):
+            key = tuple(request['key'])
+            pixmap = decode_pixmap(data['image'])
+            data = {k: v for k, v in data.items() if k != 'image'}
+            cost = pixmap.width() * pixmap.height() * 4
+            if key in self.tile_cache:
+                self.cache_bytes -= self.tile_cache.pop(key)[2]
+            self.tile_cache[key] = (pixmap, data, cost)
+            self.cache_bytes += cost
+            while self.cache_bytes > 64 * 1024 * 1024 and len(self.tile_cache) > 1:
+                _, (_, _, removed) = self.tile_cache.popitem(last=False)
+                self.cache_bytes -= removed
+            if key in self.wanted:
+                self.show_tile(key, pixmap, data)
+        elif kind == 'save':
             self.dirty = False
-            # Any undo after exporting changes the exported state.
-            self.history = [(data, index, True) for data, index, _ in self.history]
-            self.render()
-            self.status.set(f'已保存：{path}')
-        except Exception as exc:
-            messagebox.showerror('保存失败', str(exc))
-        finally:
-            if temp and os.path.exists(temp):
-                os.unlink(temp)
+            self.set_busy(False)
+            self.update_title()
+            self.statusBar().showMessage('已保存：' + data['saved'], 10000)
+            self.tile_timer.start()
+
+    def load_page(self, data, fit=False):
+        self.view.clear_erase_hover()
+        self.cancel()
+        self.path = Path(data['path'])
+        self.index, self.count, self.revision = data['index'], data['count'], data['revision']
+        self.dirty = data['dirty']
+        self.spans = data['spans']
+        self.page_rect = QRectF(0, 0, data['width'], data['height'])
+        scene = self.view.scene()
+        scene.clear()
+        self.guides = []
+        self.tile_items = {}
+        self.wanted = set()
+        self.tile_cache.clear()
+        self.cache_bytes = 0
+        self.tile_group = None
+        scene.addRect(self.page_rect, QPen(Qt.PenStyle.NoPen), QColor('white')).setZValue(-2)
+        thumbnail = scene.addPixmap(decode_pixmap(data['thumbnail']))
+        thumbnail.setScale(1 / data['scale'])
+        thumbnail.setZValue(-1)
+        thumbnail.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        scene.setSceneRect(self.page_rect.adjusted(-30, -30, 30, 30))
+        self.page_label.setText(f'  {self.index + 1} / {self.count} 页  ')
+        self.set_busy(False)
+        self.undo_action.setEnabled(data['can_undo'])
+        self.update_title()
+        if fit:
+            self.fit_page()
+        self.tile_timer.start()
+        message = '滚轮缩放，中键平移；点击原文附近可吸附到同一基线。'
+        if not self.spans:
+            message = '本页没有可提取文字（可能为扫描件）；可添加文字，但无法吸附或删除图片内文字。'
+        self.statusBar().showMessage(message)
+
+    def update_title(self):
+        self.setWindowTitle(f'{"* " if self.dirty else ""}{self.path.name if self.path else "轻简 PDF"} · {__version__} · Qt 版 · 自用')
+
+    def schedule_tiles(self):
+        if not self.path or self.busy:
+            return
+        scale = math.ceil(self.view.zoom * self.view.devicePixelRatioF() * 4) / 4
+        scale = min(10, max(0.25, scale))
+        group = (self.epoch, self.revision, self.index, scale)
+        if group != self.tile_group:
+            for item in self.tile_items.values():
+                self.view.scene().removeItem(item)
+            self.tile_items = {}
+            self.tile_group = group
+        visible = self.view.mapToScene(self.view.viewport().rect()).boundingRect().intersected(self.page_rect)
+        if visible.isEmpty():
+            self.wanted = set()
+            self.client.replace_tiles([])
+            return
+        step = 512 / scale
+        requests = []
+        self.wanted = set()
+        for row in range(max(0, math.floor(visible.top() / step)), math.ceil(visible.bottom() / step)):
+            for col in range(max(0, math.floor(visible.left() / step)), math.ceil(visible.right() / step)):
+                key = group + (col, row)
+                self.wanted.add(key)
+                if key in self.tile_items:
+                    continue
+                if key in self.tile_cache:
+                    pixmap, data, _ = self.tile_cache[key]
+                    self.tile_cache.move_to_end(key)
+                    self.show_tile(key, pixmap, data)
+                else:
+                    clip = [col * step, row * step, min((col + 1) * step, self.page_rect.width()),
+                            min((row + 1) * step, self.page_rect.height())]
+                    requests.append(dict(kind='tile', epoch=self.epoch, revision=self.revision, index=self.index,
+                                         scale=scale, clip=clip, key=key))
+        for key in list(self.tile_items):
+            if key not in self.wanted:
+                self.view.scene().removeItem(self.tile_items.pop(key))
+        center = visible.center()
+        requests.sort(key=lambda r: (r['clip'][0] - center.x()) ** 2 + (r['clip'][1] - center.y()) ** 2)
+        self.client.replace_tiles(requests)
+
+    def show_tile(self, key, pixmap, data):
+        if key in self.tile_items:
+            return
+        item = self.view.scene().addPixmap(pixmap)
+        item.setScale(1 / data['scale'])
+        item.setPos(data['x'] / data['scale'], data['y'] / data['scale'])
+        item.setZValue(0)
+        item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        self.tile_items[key] = item
+
+    def fit_page(self):
+        if self.path:
+            self.view.resetTransform()
+            self.view.zoom = 1
+            self.view.set_zoom(min((self.view.viewport().width() - 60) / self.page_rect.width(),
+                                   (self.view.viewport().height() - 60) / self.page_rect.height()))
+            self.view.centerOn(self.page_rect.center())
+
+    def mode_changed(self):
+        self.view.clear_erase_hover()
+        if hasattr(self, 'text_input') and self.mode.currentData() in ('delete', 'erase'):
+            self.cancel()
+        self.draw_guides([])
+        if self.mode.currentData() == 'erase':
+            self.statusBar().showMessage('点选删除：红框标出将删除的文字段；点击删除，Ctrl+Z 撤销。')
+        elif self.mode.currentData() == 'delete':
+            self.statusBar().showMessage('框选删除：拖动框选文字，松开后删除；Ctrl+Z 撤销。')
+
+    def spec(self):
+        draft = self.draft
+        return dict(x=draft.x(), y=draft.y(), width=draft.w, height=draft.h,
+                    text=self.text_input.toPlainText(), size=self.size.value(), color=self.color,
+                    fontfile=self.fonts.get(self.font_combo.currentText()), bold=self.bold.isChecked())
+
+    def place(self, point):
+        if not self.path or self.busy:
+            return
+        if not self.draft:
+            self.draft = Draft(self, min(self.coords['width'].value(), self.page_rect.width()),
+                               min(self.coords['height'].value(), self.page_rect.height()))
+            self.view.scene().addItem(self.draft)
+            self.draft.changed.connect(self.draft_changed)
+        draft = self.draft
+        x, y = point.x(), point.y() - draft.offset
+        guides = []
+        if self.snap.isChecked() and not QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier:
+            x, y, guides = snap_box(x, y, draft.w, draft.h, draft.offset, self.spans, 9 / self.view.zoom)
+        draft.setPos(max(0, min(x, self.page_rect.width() - draft.w)),
+                     max(0, min(y, self.page_rect.height() - draft.h)))
+        self.draw_guides(guides)
+        self.sync_geometry()
+        if draft.pixmap is None:
+            self.content_changed()
+        self.text_input.setFocus()
+
+    def sample(self, point):
+        span = nearest_span(point.x(), point.y(), self.spans, 8 / self.view.zoom)
+        if not span:
+            self.statusBar().showMessage('附近没有可提取的文字。', 5000)
+            return
+        family = match_font(span['font'], self.fonts)
+        if family:
+            self.font_combo.setCurrentText(family)
+        self.size.setValue(span['size'])
+        self.bold.setChecked(span['bold'])
+        color = span['color']
+        self.color = (((color >> 16) & 255) / 255, ((color >> 8) & 255) / 255, (color & 255) / 255)
+        self.color_button.setStyleSheet(f'color: #{color:06x}')
+        note = f'原字体：{span["font"]}，{span["size"]:.2f} pt。'
+        if not family:
+            note += f'本机未找到对应字体，使用 {self.font_combo.currentText()}。'
+        else:
+            note += f'使用本机 {family}。'
+        self.sample_label.setText(note)
+        self.mode.setCurrentIndex(0)
+        self.content_changed()
+        self.draw_guides([('h', span['baseline']), ('v', span['bbox'][0])] if span['horizontal'] else [])
+        self.statusBar().showMessage('已取样。点击要添加的位置；靠近原文基线即可吸附。', 7000)
+
+    def content_changed(self, *args):
+        if not self.draft:
+            return
+        self.preview_version += 1
+        self.draft.valid = False
+        self.draft.pixmap = None
+        self.draft.update()
+        self.apply_button.setEnabled(False)
+        self.preview_label.setText('正在生成文字排版预览…')
+        self.preview_timer.start()
+
+    def request_preview(self):
+        if self.draft and not self.busy:
+            self.client.request_preview(epoch=self.epoch, version=self.preview_version, spec=self.spec(),
+                                        scale=max(2, min(4, self.view.zoom * self.view.devicePixelRatioF())))
+
+    def draft_changed(self, resized):
+        self.sync_geometry()
+        if resized:
+            self.content_changed()
+
+    def sync_geometry(self):
+        if not self.draft:
+            return
+        values = dict(x=self.draft.x(), baseline=self.draft.y() + self.draft.offset,
+                      width=self.draft.w, height=self.draft.h)
+        for key, value in values.items():
+            self.coords[key].blockSignals(True)
+            self.coords[key].setValue(value)
+            self.coords[key].blockSignals(False)
+
+    def geometry_changed(self, key):
+        if not self.draft:
+            return
+        draft = self.draft
+        if key in ('width', 'height'):
+            width = min(self.coords['width'].value(), self.page_rect.width())
+            height = min(self.coords['height'].value(), self.page_rect.height())
+            draft.resize_box(width, height)
+            self.content_changed()
+        draft.setPos(max(0, min(self.coords['x'].value(), self.page_rect.width() - draft.w)),
+                     max(0, min(self.coords['baseline'].value() - draft.offset, self.page_rect.height() - draft.h)))
+        self.sync_geometry()
+        self.draw_guides([])
+
+    def draw_guides(self, guides):
+        for item in self.guides:
+            self.view.scene().removeItem(item)
+        self.guides = []
+        pen = QPen(QColor('#078bdf'), 1, Qt.PenStyle.DashLine)
+        pen.setCosmetic(True)
+        for kind, value in guides:
+            if kind == 'h':
+                item = self.view.scene().addLine(0, value, self.page_rect.width(), value, pen)
+            else:
+                item = self.view.scene().addLine(value, 0, value, self.page_rect.height(), pen)
+            item.setZValue(10)
+            item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self.guides.append(item)
+
+    def cancel(self):
+        self.preview_timer.stop()
+        self.client.preview = None
+        self.preview_version += 1
+        if self.draft:
+            self.view.scene().removeItem(self.draft)
+            self.draft = None
+        self.draw_guides([])
+        self.apply_button.setEnabled(False)
+        self.preview_label.setText('点击页面放置文字；虚线是首行基线。')
+
+    def apply(self):
+        if self.busy or not self.draft or not self.draft.valid:
+            return
+        spec = self.spec()
+        self.epoch += 1
+        self.set_busy(True)
+        self.client.command('insert', epoch=self.epoch, index=self.index, spec=spec)
+        self.statusBar().showMessage('正在后台写入文字…')
+
+    def delete_selection(self, rect):
+        if self.busy:
+            return
+        self.epoch += 1
+        self.set_busy(True)
+        self.client.command('delete', epoch=self.epoch, index=self.index,
+                            rect=[rect.left(), rect.top(), rect.right(), rect.bottom()])
+
+    def undo(self):
+        if self.busy:
+            return
+        if self.draft:
+            self.cancel()
+        elif self.path:
+            self.epoch += 1
+            self.set_busy(True)
+            self.client.command('undo', epoch=self.epoch, index=self.index)
 
     def turn(self, delta):
-        if self.doc and 0 <= self.index + delta < len(self.doc):
-            if self.anchor is not None:
-                messagebox.showinfo('文字尚未应用', '请先应用或取消当前文字，再切换页面。')
-                return
-            self.index += delta
-            if self.fit_mode:
-                self.fit_page()
-            else:
-                self.render()
-            self.canvas.yview_moveto(0)
+        if self.busy or not self.path or not 0 <= self.index + delta < self.count:
+            return
+        if self.draft:
+            QMessageBox.information(self, '文字尚未应用', '请先应用或取消文字预览。')
+            return
+        self.epoch += 1
+        self.set_busy(True)
+        self.client.command('page', epoch=self.epoch, index=self.index + delta)
 
-    def scale(self, delta):
-        if self.doc:
-            self.zoom_at(self.render_zoom + delta, self.canvas.winfo_width() / 2,
-                         self.canvas.winfo_height() / 2)
+    def save(self):
+        if self.busy or not self.path:
+            return
+        if self.draft:
+            QMessageBox.information(self, '文字尚未应用', '请先应用或取消文字预览，再保存。')
+            return
+        target, _ = QFileDialog.getSaveFileName(self, '另存为', str(self.path.with_name(self.path.stem + '_已修改.pdf')), 'PDF (*.pdf)')
+        if target:
+            self.set_busy(True)
+            self.client.command('save', epoch=self.epoch, path=target)
+            self.statusBar().showMessage('正在后台保存 PDF…')
 
     def choose_color(self):
-        rgb, _ = colorchooser.askcolor(title='选择文字颜色')
-        if rgb:
-            self.color = tuple(c / 255 for c in rgb)
-            self.color_button.configure(text='颜色 ' + '#%02x%02x%02x' % tuple(int(c) for c in rgb))
-            self.queue_preview()
+        color = QColorDialog.getColor(QColor.fromRgbF(*self.color), self)
+        if color.isValid():
+            self.color = (color.redF(), color.greenF(), color.blueF())
+            self.color_button.setStyleSheet('color: ' + color.name())
+            self.content_changed()
 
-    def close(self):
-        if self.discard():
-            for job in (self.preview_job, self.resize_job, self.zoom_job):
-                if job:
-                    self.root.after_cancel(job)
-            if self.doc:
-                self.doc.close()
-            self.root.destroy()
+    def import_font(self):
+        path, _ = QFileDialog.getOpenFileName(self, '选择字体文件', '', '字体 (*.ttf *.otf *.ttc)')
+        if path:
+            name = Path(path).name
+            self.fonts[name] = path
+            if self.font_combo.findText(name) < 0:
+                self.font_combo.addItem(name)
+            self.font_combo.setCurrentText(name)
+
+    def closeEvent(self, event):
+        if not self.discard():
+            event.ignore()
+            return
+        self.preview_timer.stop()
+        self.tile_timer.stop()
+        self.client.close()
+        event.accept()
+
+
+def main():
+    app = QApplication(sys.argv)
+    app.setApplicationName('轻简 PDF')
+    if 'windowsvista' in QStyleFactory.keys():
+        app.setStyle('windowsvista')
+    app.setFont(QFont('Microsoft YaHei UI', 10))
+    editor = Editor()
+    editor.show()
+    if len(sys.argv) > 1:
+        QTimer.singleShot(0, lambda: editor.open_pdf(sys.argv[1]))
+    return app.exec()
 
 
 if __name__ == '__main__':
-    if sys.platform == 'win32':
-        import ctypes
-        try:
-            ctypes.windll.shcore.SetProcessDpiAwareness(1)
-        except (AttributeError, OSError):
-            ctypes.windll.user32.SetProcessDPIAware()
-    root = TkinterDnD.Tk()
-    app = Editor(root)
-    if len(sys.argv) > 1:
-        root.after(100, lambda: app.open(sys.argv[1]))
-    root.mainloop()
+    sys.exit(main())

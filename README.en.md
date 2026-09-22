@@ -1,106 +1,100 @@
-# Light PDF Editor · Personal Use
+# Light PDF Editor v0.2.0 · Qt Edition · Personal Use
 
-English | [简体中文](README.md)
+English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
-> **Personal use / 自用**: a small desktop utility for everyday personal PDF text edits. The scope is intentionally limited. Commercial support and ongoing maintenance are not promised.
+> **Personal use / 自用**: a small utility for everyday PDF text edits. Commercial support and ongoing maintenance are not promised.
 
-![Editor preview](ui_preview.png)
+![Qt editor with baseline snapping](ui_preview.png)
 
-A local Windows PDF text editor with a Chinese interface. Add or remove text, choose fonts and bold formatting, drag and resize text boxes, and zoom with the mouse wheel. PDF content stays on your computer.
+A Windows desktop PDF text editor with a Chinese interface. This version replaces the Tkinter implementation with **PySide6 / Qt and a separate PDF worker process**. Files are processed locally.
 
-## Quick start
+## Start
 
-1. Install Python 3.10 or newer on Windows, with **Add Python to PATH** enabled.
-2. Clone this repository, or download and extract its ZIP archive.
-3. Double-click **start.bat**. On the first run, it creates a `.venv` and installs the pinned dependencies. Internet access is required for this initial setup.
-4. Drop one PDF into the window, edit it, and save a new copy.
+1. Install Python 3.10 or newer on Windows with **Add Python to PATH** enabled.
+2. Clone or extract this repository and double-click **start.bat**.
+3. The launcher creates `.venv` and installs dependencies on first use. Existing installations automatically install Qt if missing.
+4. Close the old application before restarting. Drop one PDF into the editing view or choose **打开 PDF** (Open PDF).
 
-Close the old application window before restarting after an update. Run normally rather than as Administrator: Windows may block file drops from a non-elevated File Explorer into an elevated application.
+The initial Qt download is larger than the old version; subsequent use can be offline. Run normally, not as Administrator, to avoid Windows file-drop privilege restrictions. The repository contains no personal PDFs, virtual environments, or font files.
 
-## Features
+## Align new text with existing text
 
-- Open PDFs through a file dialog or drag and drop; Chinese characters and spaces in paths are supported.
-- Add Chinese or English text, including multiple lines, with font, size, color, and bold controls.
-- Use installed Windows fonts, or select a TTF, OTF, or TTC font file.
-- Preview actual PDF text layout before applying an edit.
-- Drag inside a text box to move it. Drag any of its eight handles to resize it. Resizing reflows the text without changing its font size.
-- Fine-tune X, Y, width, and height in points (72 pt = 1 inch).
-- Remove actual PDF text within a selection while keeping images and vector graphics.
-- Undo edits, switch pages, fit the page, and save a separate PDF copy.
-- Open password-protected PDFs by entering the password.
+1. Select **取样原文样式** (Sample original style) and click the reference text.
+2. The properties panel shows the detected font, size, color, and weight. If no matching local font is available, the selected fallback is explicitly identified.
+3. Enter the new text and click its intended position. The clicked height represents the first text **baseline**, rather than the top of a box.
+4. Nearby original baselines and text edges act as snap targets. Blue guides show the alignment. Hold **Alt** while dragging to disable snapping temporarily.
+5. Drag inside the box to move it, or drag any of the eight handles to resize it. The side panel provides exact X, first-baseline Y, width, and height values in PDF points.
+6. Review the PDF engine's text preview, then click **应用文字** (Apply) or press **Ctrl+Enter**. Press **Esc** to cancel the draft.
 
-## Editing workflow
+Changing font or size preserves the first baseline where page bounds permit. Baseline snapping currently supports extractable text that is horizontal on screen. Scans, outlined glyphs, and vertical text do not provide supported baseline targets.
 
-1. Click **添加文字** (Add text).
-2. Enter text in the right panel. Choose a font, size, and color; enable **B 加粗** for bold.
-3. Click the page to place the text box. Move or resize it until the preview looks right.
-4. Click **应用** (Apply), or press **Ctrl+Enter**. Press **Esc** to cancel the pending preview.
-5. Choose **框选删除** (Select to delete) and drag a rectangle to remove text. Characters intersecting the selection are removed.
-6. Click **另存为** (Save as) to export a new file. The opened original cannot be overwritten through this tool.
+## Editing and saving
 
-After text is applied, undo it before repositioning it. Undo history is limited to 20 steps, with fewer steps retained for large documents.
+- Chinese and English text, multiline layout, font size, color, bold, and local TTF / OTF / TTC fonts.
+- Native bold font variants when available, with synthetic stroke bold otherwise. Inserted fonts are embedded in the output.
+- **框选删除** (Box delete): drag a rectangle to remove intersecting characters.
+- **点选删除** (Click delete): hover over original text to highlight the PDF text span in red, then click to remove that entire span. Use box deletion for smaller regions.
+- Original-text deletion supports Ctrl+Z undo and preserves images and vector graphics. Scanned-image text is unsupported.
+- Click a draft box to focus it, then press **Delete / Backspace** to discard that draft without changing the source document.
+- Undo retains up to 20 steps, with fewer steps for large documents. Undo applied text before repositioning it.
+- Save as exports a separate file and refuses to overwrite the opened original. Apply or cancel the pending draft first.
+- Password-protected PDFs can be opened by entering their password; undo and export preserve encryption.
 
-## Mouse and keyboard
+## Controls
 
-| Action | Control |
+| Action | Input |
 | --- | --- |
-| Open PDF | Ctrl+O |
-| Save as | Ctrl+S |
-| Apply pending text | Ctrl+Enter |
-| Cancel pending text | Esc |
-| Undo | Ctrl+Z |
-| Move the pending box | Drag inside the box |
-| Resize the box | Drag a corner or edge handle |
-| Nudge the box, with page focused | Arrow keys: 1 pt; Shift+Arrow: 10 pt |
-| Zoom around the pointer | Mouse wheel over the PDF view |
-| Scroll vertically | Shift+Mouse wheel, or scrollbar |
+| Open / Save as | Ctrl+O / Ctrl+S |
+| Apply / Cancel draft | Ctrl+Enter / Esc |
+| Undo / Bold | Ctrl+Z / Ctrl+B |
+| Delete focused draft | Delete / Backspace |
+| Zoom around pointer | Mouse wheel |
+| Pan | Middle-button drag, or Pan tool |
+| Scroll vertically | Shift+Mouse wheel or scrollbar |
+| Fit page | Ctrl+0 |
+| Nudge focused draft | Arrows: 1 pt; Shift+Arrows: 10 pt |
+| Temporarily disable snapping | Alt while dragging |
 
-The properties panel keeps its own scrolling behavior. Zoom anchoring is constrained by the page's scrollable bounds.
+72 pt equals one inch. Zoom range: 20%–600%.
 
-## Fonts and rendering
+## Rendering architecture
 
-Bold uses the installed bold variants of Microsoft YaHei, Arial, Times New Roman, and Consolas when available. Other fonts use stroke-based synthetic bold. The resulting appearance is saved into the PDF. Fonts used for inserted text are embedded in the output; font files are not included in this repository.
+- Qt transforms existing graphics immediately; wheel handlers do not parse or rasterize the PDF.
+- Opening, text extraction, editing, previews, saving, and rasterization run in a separate process.
+- After approximately 80 ms without viewport changes, the UI requests only visible 512-pixel tiles. A low-resolution page thumbnail remains underneath while sharp tiles arrive.
+- The tile cache has a 64 MiB budget, in addition to visible graphics, the thumbnail, and the PDF engine's own memory. Pending viewport requests are replaced by the latest batch, and stale document results are ignored.
+- Draft text is a separate transparent layer. Moving it does not clone or render the underlying page. Text, style, or box-size changes request a new text layout.
 
-Zoom reuses a cached page display list and scales only the visible area during wheel input. Approximately 150 ms after scrolling stops, the page is rendered sharply. A temporary soft preview does not affect exported PDF quality. Only one sharp page image is cached.
+On this machine, generated text, 1,600-line vector, and large-image fixtures produced median wheel-dispatch-plus-GUI-processing times of about 4.5–4.7 ms. **This is not complete PDF render latency or a frame-rate guarantee**, and it is not directly comparable with older benchmarks that measured different operations. The benchmark is included for reproduction.
 
-## Limitations
-
-- No OCR: text contained in scans or converted to outlines cannot be removed as editable text.
-- No direct editing of existing text, automatic matching of original fonts, or document-wide layout reflow.
-- Editing a digitally signed document can invalidate its signature.
-- This is an editing utility, not a sensitive-data sanitization tool. Metadata and attachments are not cleared.
-- The UI is currently Chinese; these instructions provide an English reference.
-
-## Development and tests
-
-The launcher sets up the environment automatically. To do it manually in PowerShell:
+## Development and verification
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe pdf_editor.py
-```
-
-Run the test suite in a Windows desktop session:
-
-```powershell
 .\.venv\Scripts\python.exe -m unittest -v test_editor.py
+.\.venv\Scripts\python.exe benchmark_editor.py
 ```
 
-Tests cover text insertion/removal, page rotations, font embedding, bold export, preview/export consistency, undo, file-drop callbacks, resizing, pointer-centered zoom, and cache invalidation. The full physical drag gesture from File Explorer is not automatically tested.
+Tests cover actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
 
-## Project files
+| File | Purpose |
+| --- | --- |
+| `pdf_editor.py` | Qt interface, interaction, scheduling, tile cache |
+| `pdf_worker.py` | Isolated PDF owner and JSON pipe protocol |
+| `pdf_core.py` | Fonts, insertion/deletion, text geometry extraction |
+| `alignment.py` | Baseline/edge snapping and local font matching |
+| `test_editor.py` | Core and Qt integration tests |
+| `benchmark_editor.py` | Generated-page interaction benchmark |
+| `start.bat` | Windows launcher |
+| `version.py` / `CHANGELOG.md` | Version metadata and release history |
+| `ROADMAP.md` | Bilingual future-version plan |
 
-- `pdf_editor.py`: desktop application.
-- `start.bat`: Windows launcher.
-- `requirements.txt`: pinned dependencies.
-- `test_editor.py`: regression tests.
-- `README.md`: Chinese documentation.
+## Limitations and personal-use notice
 
-Virtual environments, personal PDFs, and temporary files are excluded from version control.
+No OCR, direct rewriting of existing text, or document-wide reflow. Exact glyph matching is not guaranteed when the original font is unavailable. Editing signed PDFs can invalidate their signatures. Metadata and attachments are not sanitized.
 
-## Personal-use notice
+This project is for personal learning and everyday use. No separate open-source license is included. This notice does not replace the licenses of Qt, PyMuPDF, other dependencies, or installed fonts.
 
-This project is maintained for personal learning and everyday use, not as a commercial PDF product. No separate open-source license is included. This personal-use notice does not replace the licenses of third-party dependencies or installed fonts.
-
-Implementation references: [PyMuPDF page editing](https://pymupdf.readthedocs.io/en/latest/page.html) and [TkinterDnD2](https://github.com/pmgagne/tkinterdnd2).
+References: [Qt Graphics View](https://doc.qt.io/qtforpython-6.8/overviews/qtwidgets-graphicsview.html), [PyMuPDF](https://pymupdf.readthedocs.io/en/latest/page.html), [PyMuPDF multiprocessing](https://pymupdf.readthedocs.io/en/latest/recipes-multiprocessing.html).

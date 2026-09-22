@@ -4,7 +4,7 @@ if not exist ".venv\Scripts\python.exe" (
   python -m venv .venv
   if errorlevel 1 goto fail
 )
-".venv\Scripts\python.exe" -c "import pymupdf; import PIL; import tkinterdnd2" >nul 2>&1
+".venv\Scripts\python.exe" -c "import pymupdf; import PySide6" >nul 2>&1
 if errorlevel 1 (
   ".venv\Scripts\python.exe" -m pip install -r requirements.txt
   if errorlevel 1 goto fail
