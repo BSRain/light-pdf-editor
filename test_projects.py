@@ -84,6 +84,69 @@ class ProjectTests(unittest.TestCase):
                 e.end_edit()
                 if e.doc: e.doc.close()
 
+    def test_encrypted_recovery_keeps_unapplied_draft_and_history(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source, target = Path(folder)/'source.pdf', Path(folder)/'recovery.lpdf'
+            with fitz.open() as doc:
+                doc.new_page()
+                doc.save(source, encryption=fitz.PDF_ENCRYPT_AES_256, user_pw='user123', owner_pw='owner123')
+            e = Engine()
+            try:
+                e.run(dict(kind='open', path=str(source), password='user123'))
+                spec = dict(x=30, y=40, width=200, height=100, text='Committed', size=12, color=(0,0,0))
+                e.run(dict(kind='insert', spec=spec))
+                e.run(dict(kind='begin_edit', object_id='1', revision=e.revision))
+                pending = dict(index=0, editing_id='1', offset=12.5,
+                               spec=dict(spec, text='SECRET_UNAPPLIED_DRAFT', width=20, height=20))
+                history, revision = list(e.history), e.revision
+                e.run(dict(kind='autosave', path=str(target), draft=pending))
+                self.assertTrue(e.dirty)
+                self.assertEqual(e.history, history)
+                self.assertEqual(e.revision, revision)
+                self.assertEqual(e.edit_id, '1')
+                self.assertNotIn(b'SECRET_UNAPPLIED_DRAFT', target.read_bytes())
+                original = target.read_bytes()
+                with patch('pdf_worker.os.replace', side_effect=OSError('full disk')):
+                    with self.assertRaises(OSError):
+                        e.run(dict(kind='autosave', path=str(target), draft=pending))
+                self.assertEqual(target.read_bytes(), original)
+                result = e.run(dict(kind='open', path=str(target), password='user123'))
+                self.assertTrue(result['recovery'])
+                self.assertEqual(result['recovery_draft']['spec']['text'], 'SECRET_UNAPPLIED_DRAFT')
+                self.assertEqual(result['objects'][0]['spec']['text'], 'Committed')
+                self.assertIn('Committed', e.doc[0].get_text())
+                self.assertNotIn('SECRET', e.doc[0].get_text())
+                out = Path(folder)/'out.pdf'
+                e.run(dict(kind='save', path=str(out)))
+                with fitz.open(out) as doc:
+                    self.assertTrue(doc.needs_pass)
+                    doc.authenticate('user123')
+                    self.assertNotIn(ATTACHMENT, doc.embfile_names())
+            finally:
+                e.end_edit()
+                if e.doc: e.doc.close()
+
+    def test_empty_new_draft_recovery_and_wrong_edit_state_rejection(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source, target = Path(folder)/'source.pdf', Path(folder)/'recovery.lpdf'
+            with fitz.open() as doc:
+                doc.new_page(); doc.save(source)
+            e = Engine()
+            try:
+                e.run(dict(kind='open', path=str(source)))
+                spec = dict(x=30, y=40, width=200, height=100, text='', size=12, color=(0,0,0))
+                draft = dict(index=0, editing_id=None, offset=12, spec=spec)
+                e.run(dict(kind='autosave', path=str(target), draft=draft))
+                self.assertFalse(e.dirty)
+                self.assertFalse(e.history)
+                with self.assertRaisesRegex(ValueError, '草稿状态'):
+                    e.run(dict(kind='autosave', path=str(target), draft=dict(draft, editing_id='missing')))
+                result = e.run(dict(kind='open', path=str(target)))
+                self.assertEqual(result['recovery_draft']['spec']['text'], '')
+            finally:
+                e.end_edit()
+                if e.doc: e.doc.close()
+
     def test_bad_manifest_rejected_without_replacing_active_document(self):
         with tempfile.TemporaryDirectory() as folder:
             source, target = Path(folder)/'source.pdf', Path(folder)/'project.lpdf'

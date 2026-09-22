@@ -1,4 +1,4 @@
-# Light PDF Editor v0.4.1 · Qt Edition · Personal Use
+# Light PDF Editor v0.4.2 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -107,7 +107,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe benchmark_workflows.py --runs 5
 ```
 
-55 tests cover worker exit, interrupted edits, restart confirmation/cancellation, reopening the last export, independent boxes surviving redaction, Chinese font/pixel preservation, overlapping-box selection/cancel, reselect/move/update/cancel, preservation of overlapping original text, continued editing after export, encrypted object replacement, double-click token selection, precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
+61 tests cover worker exit, interrupted edits, restart confirmation/cancellation, reopening the last export, independent boxes surviving redaction, Chinese font/pixel preservation, overlapping-box selection/cancel, reselect/move/update/cancel, preservation of overlapping original text, continued editing after export, encrypted object replacement, double-click token selection, precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
 
 | File | Purpose |
 | --- | --- |
@@ -143,4 +143,13 @@ Choose **保存工程** / Ctrl+Shift+S to save a new `.lpdf` file. It contains t
 
 Apply or cancel previews before saving. Undo history, unapplied drafts and original font files are not included; another computer may require selecting a local font. Projects from encrypted PDFs retain the original password protection without storing passwords in project metadata. Saving preserves the currently opened original; choose a new filename.
 
-**另存为** / Ctrl+S still exports a regular PDF and removes this application's project editing metadata. Use it for delivery. Autosave and crash-draft recovery are planned for v0.4.2; save projects manually in this release.
+**另存为** / Ctrl+S still exports a regular PDF and removes this application's project editing metadata. Use it for delivery. v0.4.2 offers optional recovery snapshots as described below.
+
+## Automatic recovery snapshots (v0.4.2)
+
+1. After opening a document, enable **自动恢复副本** in the properties panel and choose a local directory. An initial save is attempted immediately, then checked about every 30 seconds; busy document operations defer saves and unchanged content is skipped.
+2. Each activation creates a unique `_恢复_date_time_id.lpdf` file and atomically updates it. The panel shows its path and successful-save time. Enable it again after opening another file.
+3. Snapshots include committed document edits and the placed, unapplied draft, including a draft re-editing an existing box. They do not apply drafts, clear unsaved state or alter undo history.
+4. After a crash, choose **打开恢复副本**, open the saved file, review it, apply/cancel its draft and export a PDF or project. Encrypted snapshots require the original password; passwords are not stored in snapshot metadata.
+
+Only the last successful snapshot is recoverable; later changes may be lost. Input text not yet placed on the page is omitted. Save failures pause automatic recovery with an explanation in the panel, without blocking editing or manual saves. Disabling recovery or closing the app retains existing snapshots; manage the directory and disk space yourself. Recovery snapshots require v0.4.2 or newer.

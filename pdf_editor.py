@@ -5,6 +5,8 @@ import json
 import math
 from pathlib import Path
 import sys
+from datetime import datetime
+from uuid import uuid4
 from PySide6.QtCore import Qt, QObject, Signal, QProcess, QTimer, QPointF, QRectF
 from PySide6.QtGui import QAction, QColor, QPainter, QPen, QPixmap, QImage, QFont, QPainterPath
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QGraphicsView, QGraphicsScene,
@@ -524,6 +526,13 @@ class Editor(QMainWindow):
         self.preview_timer.setInterval(100)
         self.preview_timer.timeout.connect(self.request_preview)
         self.view.viewport_changed.connect(self.tile_timer.start)
+        self.recovery_path = None
+        self.recovery_pending = False
+        self.recovery_stamp = None
+        self.pending_recovery_draft = None
+        self.recovery_timer = QTimer(self)
+        self.recovery_timer.setInterval(30000)
+        self.recovery_timer.timeout.connect(self.autosave)
         self.build_toolbar()
         self.build_panel()
         self.client = PdfClient(self)
@@ -549,6 +558,7 @@ class Editor(QMainWindow):
         self.open_action = self.action(bar, '打开文件', lambda: self.open_pdf(), 'Ctrl+O')
         self.save_action = self.action(bar, '另存为', self.save, 'Ctrl+S')
         self.project_action = self.action(bar, '保存工程', self.save_project, 'Ctrl+Shift+S')
+        self.recover_action = self.action(bar, '打开恢复副本', self.open_recovery)
         self.restart_action = self.action(bar, '重启处理进程', self.restart_worker)
         self.restart_action.setEnabled(False)
         self.undo_action = self.action(bar, '撤销', self.undo, 'Ctrl+Z')
@@ -653,6 +663,13 @@ class Editor(QMainWindow):
         cancel = QPushButton('取消预览  Esc')
         cancel.clicked.connect(self.cancel)
         layout.addWidget(cancel)
+        self.recovery_toggle = QCheckBox('自动恢复副本（约 30 秒）')
+        self.recovery_toggle.setToolTip('选择本地目录，保存当前文档和已放置的草稿；保留原有 PDF 加密。每次打开文件后需重新启用。')
+        self.recovery_toggle.toggled.connect(self.toggle_recovery)
+        layout.addWidget(self.recovery_toggle)
+        self.recovery_label = QLabel('尚未启用自动恢复副本。')
+        self.recovery_label.setWordWrap(True)
+        layout.addWidget(self.recovery_label)
         hint = QLabel('框内拖动，边角调整大小。\n方向键微调，Shift+方向键移动 10 pt。\n虚线标示首行文字基线，不是文字框顶边。')
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -676,12 +693,13 @@ class Editor(QMainWindow):
 
     def set_busy(self, value):
         self.busy = value
-        for control in (self.open_action, self.save_action, self.project_action, self.undo_action, self.redo_action, self.prev_action, self.next_action):
+        for control in (self.open_action, self.save_action, self.project_action, self.recover_action, self.undo_action, self.redo_action, self.prev_action, self.next_action):
             control.setEnabled(not value)
         self.undo_action.setEnabled(not value and self.can_undo)
         self.redo_action.setEnabled(not value and self.can_redo)
         self.delete_chars_action.setEnabled(not value and bool(self.view.selected_chars))
         self.mode.setEnabled(not value)
+        self.recovery_toggle.setEnabled(not value)
         self.apply_button.setEnabled(not value and self.draft is not None and self.draft.valid)
         if self.draft:
             self.draft.setEnabled(not value)
@@ -712,19 +730,24 @@ class Editor(QMainWindow):
         self.client.command('open', path=str(path), epoch=self.epoch)
 
     def worker_failed(self, message):
+        self.stop_recovery()
+        self.pending_recovery_draft = None
         self.tile_timer.stop()
         self.preview_timer.stop()
         self.epoch += 1
         self.set_busy(True)
         self.open_action.setEnabled(True)
+        self.recover_action.setEnabled(True)
         self.restart_action.setEnabled(True)
         self.text_input.setEnabled(True)
         self.text_input.setReadOnly(True)
-        note = message + '\n可点击“重启处理进程”重新打开最近另存的文件或原稿。未保存的修改无法恢复；右侧文字仍可复制。'
+        note = message + '\n可点击“重启处理进程”重新打开最近另存的文件或原稿。未保存的修改无法恢复；右侧文字仍可复制。若已启用恢复副本，可打开最近一次成功保存的副本。'
         self.statusBar().showMessage(note.replace('\n', ' '))
         QMessageBox.critical(self, 'PDF 处理进程已停止', note)
 
     def reset_worker(self):
+        self.stop_recovery()
+        self.pending_recovery_draft = None
         self.tile_timer.stop()
         self.preview_timer.stop()
         old = self.client
@@ -773,10 +796,15 @@ class Editor(QMainWindow):
         kind = request['kind']
         if self.client.dead:
             return
+        if kind == 'autosave':
+            self.on_autosave(response)
+            return
         if request.get('epoch') != self.epoch:
             return
         if kind == 'open' and 'error' not in response and not response.get('data', {}).get('password_required'):
             self.last_saved_path = None
+            self.stop_recovery()
+            self.pending_recovery_draft = None
         if 'error' in response:
             if kind == 'preview':
                 if request.get('version') == self.preview_version and self.draft:
@@ -803,10 +831,15 @@ class Editor(QMainWindow):
             return
         if kind == 'begin_edit':
             self.load_page(data)
-            self.restore_object_draft(data['edit_object'])
+            pending, self.pending_recovery_draft = self.pending_recovery_draft, None
+            self.restore_object_draft(dict(id=pending['editing_id'], spec=pending['spec'], offset=pending['offset']) if pending else data['edit_object'])
+            if pending:
+                self.statusBar().showMessage('已恢复重新编辑中的草稿；应用替换，Esc 保留原文字。', 10000)
         elif kind in ('open', 'page', 'insert', 'delete', 'delete_chars', 'undo', 'redo', 'update_object', 'cancel_edit'):
             retired_objects = kind in ('delete', 'delete_chars') and bool({o['id'] for o in self.objects} - {o['id'] for o in data.get('objects', [])})
             self.load_page(data, fit=kind in ('open', 'page'))
+            if kind == 'open' and data.get('recovery'):
+                self.restore_recovery(data.get('recovery_draft'))
             if retired_objects:
                 self.statusBar().showMessage('已删除文字。与删除范围相交或连锁重叠的文字框已转为普通文字；未受影响的文字框仍可编辑。撤销可恢复。', 10000)
         elif kind == 'preview':
@@ -1237,6 +1270,87 @@ class Editor(QMainWindow):
         self.set_busy(True)
         self.client.command('page', epoch=self.epoch, index=self.index + delta)
 
+    def stop_recovery(self):
+        self.recovery_timer.stop()
+        self.recovery_pending = False
+        self.recovery_stamp = None
+        self.recovery_toggle.blockSignals(True)
+        self.recovery_toggle.setChecked(False)
+        self.recovery_toggle.blockSignals(False)
+        self.recovery_label.setText('自动恢复已关闭；已有副本保留在所选目录。')
+
+    def toggle_recovery(self, enabled):
+        if not enabled:
+            self.stop_recovery()
+            return
+        if not self.path or self.busy or self.client.dead:
+            self.stop_recovery()
+            return
+        folder = QFileDialog.getExistingDirectory(self, '选择自动恢复副本保存目录', str(self.path.parent))
+        if not folder:
+            self.stop_recovery()
+            return
+        name = self.path.stem + '_恢复_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '_' + uuid4().hex[:8] + '.lpdf'
+        self.recovery_path = Path(folder) / name
+        self.recovery_stamp = None
+        self.recovery_label.setText('等待保存恢复副本：' + str(self.recovery_path))
+        self.recovery_timer.start()
+        self.autosave()
+
+    def autosave(self):
+        if not self.recovery_toggle.isChecked() or not self.recovery_path or not self.path:
+            return
+        if self.busy or self.client.dead or self.recovery_pending or self.client.commands:
+            return
+        draft = dict(spec=self.spec(), offset=self.draft.offset, index=self.index,
+                     editing_id=self.editing_id) if self.draft else None
+        stamp = json.dumps([self.revision, self.index, draft], sort_keys=True, ensure_ascii=False)
+        if stamp == self.recovery_stamp:
+            return
+        self.recovery_pending = True
+        # Background snapshots must not discard queued previews or tiles.
+        self.client.commands.append(dict(kind='autosave', path=str(self.recovery_path),
+            index=self.index, draft=draft, epoch=self.epoch, stamp=stamp))
+        self.client.dispatch()
+
+    def on_autosave(self, response):
+        request = response['request']
+        if self.recovery_path is None or request['path'] != str(self.recovery_path):
+            return
+        self.recovery_pending = False
+        if request.get('epoch') != self.epoch or not self.recovery_toggle.isChecked():
+            return
+        if 'error' in response:
+            self.stop_recovery()
+            self.recovery_label.setText('自动恢复副本保存失败，已暂停：' + response['error'])
+            return
+        self.recovery_stamp = request['stamp']
+        self.recovery_label.setText('恢复副本已保存 ' + datetime.now().strftime('%H:%M:%S') + '\n' + str(self.recovery_path))
+
+    def open_recovery(self):
+        if self.busy and not self.client.dead:
+            return
+        folder = str(self.recovery_path.parent if self.recovery_path else (self.path.parent if self.path else Path.home()))
+        target, _ = QFileDialog.getOpenFileName(self, '打开恢复副本', folder, '恢复副本 / 工程 (*.lpdf)')
+        if target:
+            self.open_pdf(target)
+
+    def restore_recovery(self, draft):
+        self.statusBar().showMessage('已打开恢复副本。请检查内容，再另存 PDF 或工程；自动恢复需要重新启用。', 10000)
+        if not draft:
+            return
+        if draft['editing_id'] is not None:
+            self.pending_recovery_draft = draft
+            self.mode.setCurrentIndex(self.mode.findData('edit'))
+            self.set_busy(True)
+            self.client.command('begin_edit', epoch=self.epoch, index=self.index,
+                                revision=self.revision, object_id=draft['editing_id'])
+        else:
+            self.mode.setCurrentIndex(self.mode.findData('add'))
+            self.restore_object_draft(dict(id=None, spec=draft['spec'], offset=draft['offset']))
+            self.apply_button.setText('应用文字  Ctrl+Enter')
+            self.statusBar().showMessage('已恢复未应用的文字草稿；检查预览后应用，Esc 取消。', 10000)
+
     def save_project(self):
         if self.busy or not self.path:
             return
@@ -1284,6 +1398,7 @@ class Editor(QMainWindow):
         if not self.discard():
             event.ignore()
             return
+        self.recovery_timer.stop()
         self.preview_timer.stop()
         self.tile_timer.stop()
         self.client.close()

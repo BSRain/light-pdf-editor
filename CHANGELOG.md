@@ -3,6 +3,17 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.4.2 — 2026-09-23
+
+- 可选自动恢复副本：选择目录后首次保存，约每 30 秒检查，跳过未变化内容，后台保存不丢弃预览与渲染请求。
+  Optional recovery snapshots save initially and check about every 30 seconds, skipping unchanged content without discarding preview/render requests.
+- 恢复新增草稿和重新编辑草稿；保留应用 / 取消语义、PDF 加密、未保存标记和撤销历史。空草稿及尚未排下的草稿也能保存。
+  Restore new and re-edit drafts while retaining apply/cancel semantics, encryption, dirty state and undo history. Empty and overflowing drafts can be snapshotted.
+- 保存失败暂停备份并显示原因；原子更新保留上次成功副本。每次启用独立文件，避免多个窗口互相覆盖。
+  Failures pause backups with a visible explanation; atomic replacement preserves the last successful copy. Each activation uses a unique file to avoid cross-window collisions.
+- 61 项回归，包含真实终止进程后的草稿恢复、重新编辑取消还原、加密草稿、写入失败与状态保护。
+  61 regressions include actual worker termination and draft recovery, canceling recovered re-edits, encrypted drafts, write failures and state preservation.
+
 ## v0.4.1 — 2026-09-23
 
 - 新增 `.lpdf` 独立工程保存及打开、拖放。当前 PDF 快照和已应用文字框一起保存，重开恢复位置、字体设置、行距和编辑能力。

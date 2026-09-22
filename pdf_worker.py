@@ -10,7 +10,7 @@ import sys
 import tempfile
 import pymupdf as fitz
 from process_metrics import process_memory
-from project_file import ATTACHMENT, write_manifest, read_manifest
+from project_file import ATTACHMENT, write_manifest, read_manifest, validate_spec
 from pdf_core import add_text, delete_text, text_spans, baseline_offset, text_characters, delete_characters, ruling_lines
 
 
@@ -203,7 +203,11 @@ class Engine:
             self.future = []
             self.dirty = False
             self.display_key = None
-            return self.metadata(project['index'] if project else 0)
+            result = self.metadata(project['index'] if project else 0)
+            if project and project.get('recovery'):
+                result['recovery_draft'] = project.get('draft')
+                result['recovery'] = True
+            return result
         if kind == 'preview':
             spec = dict(request['spec'])
             spec['x'], spec['y'] = 0, 0
@@ -243,7 +247,7 @@ class Engine:
             self.end_edit()
             self.revision += 1
             return self.metadata(index)
-        if self.edit_doc is not None and kind not in ('tile', 'update_object'):
+        if self.edit_doc is not None and kind not in ('tile', 'update_object', 'autosave'):
             raise ValueError('请先应用或取消当前文字编辑。')
         if kind == 'page':
             return self.metadata(index)
@@ -295,13 +299,13 @@ class Engine:
                 self.limit_history()
                 self.revision += 1
             return self.metadata(index)
-        if kind in ('save', 'save_project'):
+        if kind in ('save', 'save_project', 'autosave'):
             target = Path(request['path']).resolve()
             if target == self.path:
                 raise ValueError('请选择新的文件名，保留当前打开的原始文件。')
             if kind == 'save' and target.suffix.lower() == '.lpdf':
                 raise ValueError('普通 PDF 请使用 .pdf 扩展名；保存工程请使用“保存工程”。')
-            if kind == 'save_project' and target.suffix.lower() != '.lpdf':
+            if kind in ('save_project', 'autosave') and target.suffix.lower() != '.lpdf':
                 raise ValueError('工程文件请使用 .lpdf 扩展名。')
             temp = None
             try:
@@ -310,12 +314,20 @@ class Engine:
                 with self.copy_document() as export:
                     if ATTACHMENT in export.embfile_names():
                         export.embfile_del(ATTACHMENT)
-                    if kind == 'save_project':
-                        write_manifest(export, self.objects, self.object_serial, index)
+                    if kind in ('save_project', 'autosave'):
+                        draft = request.get('draft') if kind == 'autosave' else None
+                        if draft is not None:
+                            validate_spec(self.doc[index], draft['spec'], allow_empty=True)
+                            if draft['index'] != index or draft['editing_id'] != self.edit_id:
+                                raise ValueError('恢复副本中的草稿状态已变化，请重试。')
+                        write_manifest(export, self.objects, self.object_serial, index,
+                                       recovery=kind == 'autosave', draft=draft)
                     # Projects retain xref numbers used by editable-object references.
-                    export.save(temp, garbage=1 if kind == 'save_project' else 2,
+                    export.save(temp, garbage=2 if kind == 'save' else 1,
                                 deflate=True, encryption=fitz.PDF_ENCRYPT_KEEP)
                 os.replace(temp, target)
+                if kind == 'autosave':
+                    return {'saved': str(target)}
                 self.dirty = False
                 self.history = [(data, True, i, objects) for data, _, i, objects in self.history]
                 self.future = [(data, True, i, objects) for data, _, i, objects in self.future]

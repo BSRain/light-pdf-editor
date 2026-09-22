@@ -388,6 +388,93 @@ class QtTests(unittest.TestCase):
             self.assertEqual(doc.embfile_count(), 0)
             self.assertIn('Reopened project', doc[0].get_text().replace('\xa0', ' '))
 
+    def enable_recovery(self):
+        e = self.editor
+        with patch('pdf_editor.QFileDialog.getExistingDirectory', return_value=self.temp.name):
+            e.recovery_toggle.setChecked(True)
+        self.wait(lambda: e.recovery_path and e.recovery_path.exists() and not e.recovery_pending)
+        return e.recovery_path
+
+    def test_autosave_new_draft_restored_after_worker_exit(self):
+        e = self.editor
+        self.make_draft()
+        original = self.path.read_bytes()
+        target = self.enable_recovery()
+        self.assertIsNotNone(e.draft)
+        self.assertFalse(e.dirty)
+        stamp = e.recovery_stamp
+        e.autosave()
+        self.assertFalse(e.recovery_pending)
+        self.assertEqual(stamp, e.recovery_stamp)
+        self.kill_worker()
+        with patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.Yes):
+            e.open_pdf(str(target))
+        self.wait(lambda: not e.busy and e.draft and e.draft.valid)
+        self.assertEqual(e.text_input.toPlainText(), 'Aligned text')
+        self.assertIsNone(e.editing_id)
+        self.assertFalse(e.recovery_toggle.isChecked())
+        self.assertFalse(any('Aligned' in s['text'] for s in e.spans))
+        e.apply()
+        self.wait(lambda: not e.busy)
+        self.assertTrue(any('Aligned' in s['text'] for s in e.spans))
+        self.assertEqual(self.path.read_bytes(), original)
+
+    def test_autosave_reedit_draft_cancel_restores_committed_text(self):
+        e = self.editor
+        self.make_draft()
+        e.apply()
+        self.wait(lambda: not e.busy)
+        obj = e.objects[0]
+        e.mode.setCurrentIndex(e.mode.findData('edit'))
+        e.edit_at(QPointF(obj['bbox'][0]+10, obj['bbox'][1]+10))
+        self.wait(lambda: not e.busy and e.draft and e.draft.valid)
+        e.text_input.setPlainText('Unapplied replacement')
+        self.wait(lambda: e.draft.valid)
+        target = self.enable_recovery()
+        self.assertTrue(e.dirty)
+        self.kill_worker()
+        with patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.Yes):
+            e.open_pdf(str(target))
+        self.wait(lambda: not e.busy and e.draft and e.draft.valid)
+        self.assertEqual(e.text_input.toPlainText(), 'Unapplied replacement')
+        self.assertEqual(e.editing_id, obj['id'])
+        self.assertFalse(any('Aligned' in s['text'] for s in e.spans))
+        e.cancel()
+        self.wait(lambda: not e.busy and e.draft is None)
+        self.assertTrue(any('Aligned' in s['text'] for s in e.spans))
+        self.assertFalse(any('Unapplied' in s['text'] for s in e.spans))
+
+    def test_autosave_timer_updates_changed_draft(self):
+        e = self.editor
+        self.make_draft()
+        target = self.enable_recovery()
+        before = e.recovery_stamp
+        e.recovery_timer.setInterval(100)
+        e.text_input.setPlainText('Changed after backup')
+        self.wait(lambda: e.recovery_stamp != before and not e.recovery_pending)
+        from project_file import read_manifest
+        with fitz.open(target) as doc:
+            data = read_manifest(doc)
+            self.assertEqual(data['draft']['spec']['text'], 'Changed after backup')
+        self.assertIsNotNone(e.draft)
+        self.assertFalse(e.dirty)
+        e.recovery_toggle.setChecked(False)
+        self.assertFalse(e.recovery_timer.isActive())
+        self.assertTrue(target.exists())
+
+    def test_autosave_failure_does_not_disable_editing(self):
+        e = self.editor
+        self.make_draft()
+        with patch('pdf_editor.QFileDialog.getExistingDirectory', return_value=str(Path(self.temp.name)/'missing')):
+            e.recovery_toggle.setChecked(True)
+        self.wait(lambda: not e.recovery_toggle.isChecked())
+        self.assertIn('保存失败', e.recovery_label.text())
+        self.assertFalse(e.busy)
+        self.assertTrue(e.draft.valid)
+        e.apply()
+        self.wait(lambda: not e.busy)
+        self.assertTrue(any('Aligned' in s['text'] for s in e.spans))
+
     def kill_worker(self):
         self.editor.client.process.kill()
         self.wait(lambda: self.editor.client.dead)
