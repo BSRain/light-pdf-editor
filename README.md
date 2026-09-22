@@ -1,4 +1,4 @@
-# 轻简 PDF v0.3.3 · Qt 版 · 自用
+# 轻简 PDF v0.4.0 · Qt 版 · 自用
 
 [English](README.en.md) | 简体中文 | [版本计划](ROADMAP.md) | [更新日志](CHANGELOG.md)
 
@@ -128,3 +128,11 @@ python -m venv .venv
 本项目用于个人学习和日常自用，未附加单独的开源许可证。“自用”标注不改变 Qt、PyMuPDF 等第三方依赖和本机字体的许可条款。
 
 实现参考：[Qt Graphics View](https://doc.qt.io/qtforpython-6.8/overviews/qtwidgets-graphicsview.html)、[PyMuPDF](https://pymupdf.readthedocs.io/en/latest/page.html)、[PyMuPDF 多进程](https://pymupdf.readthedocs.io/en/latest/recipes-multiprocessing.html)。
+
+## v0.4.0 排版设置
+
+- 多栏文档吸附优先选择文字框左侧定位点附近的文字行，减少远处列的干扰。
+- 右侧「行距」以相邻基线之间的 PDF 点数计量；0 表示自动。取样会尝试估计同列、近似字号的相邻行，结果仍需在预览中确认。
+- 选择「表格单元格填字」，点击有完整矢量边框的单元格，自动放置四周 4 pt 内边距的文字框；之后可拖动、缩放并应用文字。扫描件、缺边表格、斜线边框不支持自动识别。
+- 行距随会话内文字框保留，支持重新编辑、撤销和导出。字体匹配支持导入字体的家族名称；无法匹配的窄体等字体明确回退。
+- 底层文字框的高度预检偏保守，少数可容纳内容也可能提示增大框；不会为适应框尺寸自动缩小字号。当前不提供段落自动重排或单元格合并操作。

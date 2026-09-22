@@ -30,7 +30,9 @@ def bold_font_path(path):
     return str(candidate) if candidate and candidate.exists() else None
 
 
-def add_text(page, x, y, text, size, color, fontfile=None, width=None, height=None, bold=False):
+def add_text(page, x, y, text, size, color, fontfile=None, width=None, height=None, bold=False, line_spacing=None):
+    if line_spacing is not None and line_spacing <= 0:
+        raise ValueError('行距必须大于零，或选择自动。')
     page_width, page_height = page.rect.width, page.rect.height
     if not (0 <= x < page_width and 0 <= y < page_height):
         raise ValueError('请在页面内点击。')
@@ -53,12 +55,23 @@ def add_text(page, x, y, text, size, color, fontfile=None, width=None, height=No
         if missing:
             raise ValueError('当前字体不支持这些字符：' + ''.join(sorted(missing))[:16] + '。请选择其他字体。')
         fontname = 'PE' + hashlib.sha256(str(fontfile).encode()).hexdigest()[:16]
-    remaining = page.insert_textbox(rect, text, fontsize=size, fontname=fontname, fontfile=fontfile,
+    shape = page.new_shape()
+    remaining = shape.insert_textbox(rect, text, fontsize=size, fontname=fontname, fontfile=fontfile,
                                    color=color, fill=color, rotate=page.rotation,
+                                   lineheight=line_spacing / baseline_offset(fontfile, size) if line_spacing is not None else None,
                                    render_mode=2 if synthetic_bold else 0,
                                    border_width=size * 0.025 if synthetic_bold else 0.05)
+    if line_spacing is not None and remaining >= 0:
+        # PyMuPDF 1.26.7 advances by ascender * size * lineheight. Its fit
+        # estimate omits that factor; also check actual baseline geometry.
+        metrics = load_font(fontfile) if fontfile else fitz.Font('china-s')
+        count = shape.text_cont.count('TJ\n')
+        actual_height = size * (metrics.ascender - metrics.descender) + max(0, count - 1) * line_spacing
+        if actual_height > box_height + 0.001:
+            remaining = -1
     if remaining < 0:
         raise ValueError('文字框放不下这些文字，请增大文字框或减小字号。')
+    shape.commit()
 
 
 def delete_text(page, visible_rect):
@@ -167,3 +180,35 @@ def delete_characters(page, ids):
         for a, b in zip(expected, actual)
     ):
         raise ValueError('此 PDF 的字符布局无法安全分离，已取消删除并保留原文。')
+
+
+def ruling_lines(page):
+    """Visible axis-aligned stroked segments for explicit bordered-cell placement."""
+    lines = []
+    matrix = page.rotation_matrix
+    for drawing in page.get_drawings():
+        if drawing.get('type') not in ('s', 'fs') or drawing.get('width', 1) > 3:
+            continue
+        for item in drawing['items']:
+            pairs = []
+            if item[0] == 'l':
+                pairs = [(item[1], item[2])]
+            elif item[0] == 're':
+                rect = item[1]
+                pairs = [(rect.tl, rect.tr), (rect.tr, rect.br), (rect.br, rect.bl), (rect.bl, rect.tl)]
+            for a, b in pairs:
+                a, b = a * matrix, b * matrix
+                if abs(a.y - b.y) < .05 and abs(a.x - b.x) >= 10:
+                    lines.append(('h', round((a.y + b.y) / 2, 2), min(a.x, b.x), max(a.x, b.x)))
+                elif abs(a.x - b.x) < .05 and abs(a.y - b.y) >= 10:
+                    lines.append(('v', round((a.x + b.x) / 2, 2), min(a.y, b.y), max(a.y, b.y)))
+                if len(lines) > 5000:
+                    return []
+    # Merge touching grid segments so a row split at columns remains a border.
+    merged = []
+    for axis, coord, start, end in sorted(lines):
+        if merged and merged[-1][0] == axis and abs(merged[-1][1] - coord) < .1 and start <= merged[-1][3] + .5:
+            merged[-1] = (axis, merged[-1][1], min(merged[-1][2], start), max(merged[-1][3], end))
+        else:
+            merged.append((axis, coord, start, end))
+    return merged

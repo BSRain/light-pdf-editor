@@ -10,7 +10,7 @@ import sys
 import tempfile
 import pymupdf as fitz
 from process_metrics import process_memory
-from pdf_core import add_text, delete_text, text_spans, baseline_offset, text_characters, delete_characters
+from pdf_core import add_text, delete_text, text_spans, baseline_offset, text_characters, delete_characters, ruling_lines
 
 
 class Engine:
@@ -34,7 +34,7 @@ class Engine:
         scale = min(0.6, (700000 / (page.rect.width * page.rect.height)) ** 0.5)
         pix = self.get_display(index).get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
         return dict(path=str(self.path), index=index, count=len(self.doc), revision=self.revision,
-                    width=page.rect.width, height=page.rect.height, spans=text_spans(page), characters=text_characters(page),
+                    width=page.rect.width, height=page.rect.height, spans=text_spans(page), characters=text_characters(page), ruling_lines=ruling_lines(page),
                     objects=[deepcopy(o) for o in self.objects.values() if o['index'] == index],
                     dirty=self.dirty, can_undo=bool(self.history), can_redo=bool(self.future), thumbnail=self.image(pix), scale=scale)
 

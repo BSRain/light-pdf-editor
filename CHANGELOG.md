@@ -3,6 +3,17 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.4.0 — 2026-09-23
+
+- 多栏吸附优先附近文本；取样估计同列相邻基线距离，新增可编辑行距，重新编辑和撤销保留设置。
+  Prefer nearby column text when snapping; sample adjacent baseline pitch, edit line spacing and retain it through re-editing and undo.
+- 完整矢量边框单元格点击填字，自动设置 4 pt 内边距，支持旋转页面；不完整边框提示手动定位。
+  Click fully bordered vector cells for placement with 4 pt padding, including rotated pages; incomplete borders require manual placement.
+- 改进导入字体家族匹配，避免窄体误匹配；修正底层字体上升部造成的行距偏差，提交前检查文字高度。
+  Improve imported font-family matching and narrow-font fallback; compensate font-ascender line-pitch differences and check height before committing text.
+- 新增排版和 Qt 回归，覆盖中英文字体、加粗、四种旋转、行距导出、重编辑、表格点击及溢出无修改。
+  Layout and Qt regressions cover Chinese/English fonts, bold, four rotations, exported pitch, re-editing, cell clicks and non-mutating overflow rejection.
+
 ## v0.3.3 — 2026-09-23
 
 - 处理进程异常退出后禁用编辑，提供重启及重新打开最近导出 / 原稿入口；未保存内容需确认放弃，右侧文字可复制。丢弃旧命令和过期结果。

@@ -1,4 +1,4 @@
-# Light PDF Editor v0.3.3 · Qt Edition · Personal Use
+# Light PDF Editor v0.4.0 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -128,3 +128,11 @@ No OCR, direct rewriting of existing text, or document-wide reflow. Exact glyph 
 This project is for personal learning and everyday use. No separate open-source license is included. This notice does not replace the licenses of Qt, PyMuPDF, other dependencies, or installed fonts.
 
 References: [Qt Graphics View](https://doc.qt.io/qtforpython-6.8/overviews/qtwidgets-graphicsview.html), [PyMuPDF](https://pymupdf.readthedocs.io/en/latest/page.html), [PyMuPDF multiprocessing](https://pymupdf.readthedocs.io/en/latest/recipes-multiprocessing.html).
+
+## v0.4.0 layout controls
+
+- Baseline snapping favors text near the box's left anchor, reducing interference from distant columns.
+- **行距** specifies the distance between adjacent baselines in PDF points; 0 selects automatic spacing. Style sampling estimates spacing from nearby same-column lines with similar font sizes; review the estimate in the preview.
+- Choose **表格单元格填字** and click inside a fully bordered vector cell to create a box with 4 pt padding. Move, resize and apply as usual. Scans, incomplete borders and slanted borders do not support automatic placement.
+- Line spacing survives session re-editing, undo and export. Imported font family names are matched; unavailable families such as narrow variants use an explicit fallback.
+- The underlying textbox height preflight is conservative and may ask for a larger box even when text could fit. Font size is never reduced automatically. Paragraph reflow and cell merging are outside this release.

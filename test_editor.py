@@ -322,6 +322,39 @@ class QtTests(unittest.TestCase):
         self.wait(lambda: e.draft is not None and e.draft.valid)
         return span
 
+    def test_cell_click_line_pitch_and_reedit(self):
+        e = self.editor
+        path = Path(self.temp.name) / 'grid.pdf'
+        with fitz.open() as doc:
+            p = doc.new_page()
+            p.draw_rect(fitz.Rect(40, 60, 260, 200))
+            doc.save(path)
+        e.open_pdf(str(path))
+        self.wait(lambda: not e.busy and e.ruling_lines)
+        e.mode.setCurrentIndex(e.mode.findData('cell'))
+        e.text_input.setPlainText('First row\nSecond row')
+        e.line_spacing.setValue(25)
+        point = e.view.mapFromScene(QPointF(100, 100))
+        QTest.mouseClick(e.view.viewport(), Qt.MouseButton.LeftButton, pos=point)
+        self.wait(lambda: e.draft is not None and e.draft.valid)
+        self.assertAlmostEqual(e.draft.x(), 44, delta=.02)
+        self.assertAlmostEqual(e.draft.y(), 64, delta=.02)
+        self.assertEqual((e.draft.w, e.draft.h), (212, 132))
+        e.apply()
+        self.wait(lambda: not e.busy and e.draft is None)
+        self.assertAlmostEqual(e.spans[1]['baseline']-e.spans[0]['baseline'], 25, delta=.02)
+        obj = e.objects[-1]
+        e.mode.setCurrentIndex(e.mode.findData('edit'))
+        e.edit_at(QPointF(60, 80))
+        self.wait(lambda: not e.busy and e.draft and e.draft.valid)
+        self.assertEqual(e.line_spacing.value(), 25)
+        self.assertEqual(e.editing_id, obj['id'])
+        e.cancel()
+        self.wait(lambda: not e.busy)
+        e.mode.setCurrentIndex(e.mode.findData('cell'))
+        e.place_cell(QPointF(20, 20))
+        self.assertIsNone(e.draft)
+
     def kill_worker(self):
         self.editor.client.process.kill()
         self.wait(lambda: self.editor.client.dead)

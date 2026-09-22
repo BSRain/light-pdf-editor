@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QGraphicsView
     QDoubleSpinBox, QCheckBox, QPlainTextEdit, QDockWidget, QFileDialog, QMessageBox,
     QColorDialog, QInputDialog, QLineEdit, QScrollArea, QStyleFactory)
 from pdf_core import windows_fonts
-from alignment import snap_box, nearest_span, match_font, word_at
+from alignment import snap_box, nearest_span, match_font, word_at, sample_line_spacing, containing_cell
 from version import __version__
 
 
@@ -328,6 +328,8 @@ class PdfView(QGraphicsView):
             mode = self.editor.mode.currentData()
             if mode == 'sample':
                 self.editor.sample(point)
+            elif mode == 'cell':
+                self.editor.place_cell(point)
             elif mode == 'edit':
                 self.editor.edit_at(point)
             elif mode == 'add':
@@ -496,6 +498,7 @@ class Editor(QMainWindow):
         self.spans = []
         self.characters = []
         self.objects = []
+        self.ruling_lines = []
         self.editing_id = None
         self.can_undo = False
         self.can_redo = False
@@ -568,7 +571,7 @@ class Editor(QMainWindow):
         self.addToolBar(editing)
         editing.addWidget(QLabel('工具  '))
         self.mode = QComboBox()
-        for label, value in [('添加文字', 'add'), ('编辑新增文字', 'edit'), ('精细删除（按字符）', 'precise'), ('框选删除', 'delete'), ('点选删除文字', 'erase'), ('取样原文样式', 'sample'), ('平移页面', 'pan')]:
+        for label, value in [('添加文字', 'add'), ('表格单元格填字', 'cell'), ('编辑新增文字', 'edit'), ('精细删除（按字符）', 'precise'), ('框选删除', 'delete'), ('点选删除文字', 'erase'), ('取样原文样式', 'sample'), ('平移页面', 'pan')]:
             self.mode.addItem(label, value)
         self.mode.currentIndexChanged.connect(self.mode_changed)
         editing.addWidget(self.mode)
@@ -610,6 +613,14 @@ class Editor(QMainWindow):
         self.size.setSuffix(' pt')
         self.size.valueChanged.connect(self.content_changed)
         form.addRow('字号', self.size)
+        self.line_spacing = QDoubleSpinBox()
+        self.line_spacing.setRange(0, 1000)
+        self.line_spacing.setDecimals(2)
+        self.line_spacing.setSuffix(' pt')
+        self.line_spacing.setSpecialValueText('自动')
+        self.line_spacing.setToolTip('相邻行基线之间的距离；0 为字体默认行距。取样时尝试读取同列相邻行。')
+        self.line_spacing.valueChanged.connect(self.content_changed)
+        form.addRow('行距', self.line_spacing)
         self.bold = QCheckBox('加粗')
         self.bold.toggled.connect(self.content_changed)
         form.addRow('', self.bold)
@@ -673,7 +684,7 @@ class Editor(QMainWindow):
         self.apply_button.setEnabled(not value and self.draft is not None and self.draft.valid)
         if self.draft:
             self.draft.setEnabled(not value)
-        for control in (self.text_input, self.font_combo, self.size, self.bold, *self.coords.values()):
+        for control in (self.text_input, self.font_combo, self.size, self.line_spacing, self.bold, *self.coords.values()):
             control.setEnabled(not value)
 
     def discard(self):
@@ -728,6 +739,7 @@ class Editor(QMainWindow):
         self.last_saved_path = None
         self.page_rect = QRectF()
         self.spans, self.characters, self.objects = [], [], []
+        self.ruling_lines = []
         self.tile_cache.clear()
         self.tile_items, self.wanted = {}, set()
         self.tile_group = None
@@ -798,7 +810,8 @@ class Editor(QMainWindow):
                 self.statusBar().showMessage('已删除文字。与删除范围相交或连锁重叠的文字框已转为普通文字；未受影响的文字框仍可编辑。撤销可恢复。', 10000)
         elif kind == 'preview':
             if self.draft and request['version'] == self.preview_version:
-                baseline = self.draft.y() + self.draft.offset
+                baseline = self.draft.y() + (data['baseline_offset'] if getattr(self.draft, 'anchor_top', False) else self.draft.offset)
+                self.draft.anchor_top = False
                 self.draft.offset = data['baseline_offset']
                 self.draft.setY(max(0, min(baseline - self.draft.offset, self.page_rect.height() - self.draft.h)))
                 self.draft.pixmap = decode_pixmap(data['image'])
@@ -838,6 +851,7 @@ class Editor(QMainWindow):
         self.spans = data['spans']
         self.characters = data.get('characters', [])
         self.objects = data.get('objects', [])
+        self.ruling_lines = data.get('ruling_lines', [])
         self.can_undo, self.can_redo = data['can_undo'], data.get('can_redo', False)
         self.page_rect = QRectF(0, 0, data['width'], data['height'])
         scene = self.view.scene()
@@ -931,10 +945,12 @@ class Editor(QMainWindow):
     def mode_changed(self):
         self.view.clear_erase_hover()
         self.view.clear_character_selection()
-        if hasattr(self, 'text_input') and (self.editing_id is not None or self.mode.currentData() in ('delete', 'erase', 'precise', 'edit')):
+        if hasattr(self, 'text_input') and (self.editing_id is not None or self.mode.currentData() in ('delete', 'erase', 'precise', 'edit', 'cell')):
             self.cancel()
         self.draw_guides([])
-        if self.mode.currentData() == 'edit':
+        if self.mode.currentData() == 'cell':
+            self.statusBar().showMessage('表格填字：输入文字后点击有完整直线边框的单元格，自动留出 4 pt 内边距。扫描表格不支持。')
+        elif self.mode.currentData() == 'edit':
             self.statusBar().showMessage('点击本次打开后新增的文字，重新修改或移动；应用更新，Esc 取消。')
         elif self.mode.currentData() == 'precise':
             self.statusBar().showMessage('精细删除：单击选字，双击选词段，拖动多选；预览后按 Delete 删除，Esc 取消。')
@@ -981,6 +997,7 @@ class Editor(QMainWindow):
         self.font_combo.setCurrentText(label)
         self.text_input.setPlainText(spec['text'])
         self.size.setValue(spec['size'])
+        self.line_spacing.setValue(spec.get('line_spacing') or 0)
         self.bold.setChecked(spec.get('bold', False))
         self.color = tuple(spec['color'])
         self.color_button.setStyleSheet('color: ' + QColor.fromRgbF(*self.color).name())
@@ -998,7 +1015,33 @@ class Editor(QMainWindow):
         draft = self.draft
         return dict(x=draft.x(), y=draft.y(), width=draft.w, height=draft.h,
                     text=self.text_input.toPlainText(), size=self.size.value(), color=self.color,
-                    fontfile=self.fonts.get(self.font_combo.currentText()), bold=self.bold.isChecked())
+                    fontfile=self.fonts.get(self.font_combo.currentText()), bold=self.bold.isChecked(),
+                    line_spacing=self.line_spacing.value() or None)
+
+    def place_cell(self, point):
+        if self.busy or not self.path:
+            return
+        bounds = containing_cell(point.x(), point.y(), self.ruling_lines)
+        if bounds is None:
+            self.statusBar().showMessage('没有找到完整的矢量单元格边框；请用“添加文字”手动定位。', 6000)
+            return
+        left, top, right, bottom = bounds
+        if not self.page_rect.contains(QRectF(left, top, right-left, bottom-top)):
+            self.statusBar().showMessage('单元格边框超出可见页面，请手动定位。', 5000)
+            return
+        if right - left < 20 or bottom - top < 20:
+            self.statusBar().showMessage('单元格过小，请手动设置文字框或减小字号。', 5000)
+            return
+        self.cancel(local=True)
+        self.draft = Draft(self, right - left - 8, bottom - top - 8)
+        self.draft.setPos(left + 4, top + 4)
+        self.draft.anchor_top = True
+        self.view.scene().addItem(self.draft)
+        self.draft.changed.connect(self.draft_changed)
+        self.sync_geometry()
+        self.content_changed()
+        self.text_input.setFocus()
+        self.statusBar().showMessage('已按单元格放置文字框。可修改行距、字号或拉伸；应用前检查预览。')
 
     def place(self, point):
         if not self.path or self.busy:
@@ -1030,6 +1073,8 @@ class Editor(QMainWindow):
         if family:
             self.font_combo.setCurrentText(family)
         self.size.setValue(span['size'])
+        spacing = sample_line_spacing(span, self.spans)
+        self.line_spacing.setValue(spacing or 0)
         self.bold.setChecked(span['bold'])
         color = span['color']
         self.color = (((color >> 16) & 255) / 255, ((color >> 8) & 255) / 255, (color & 255) / 255)
@@ -1039,6 +1084,7 @@ class Editor(QMainWindow):
             note += f'本机未找到对应字体，使用 {self.font_combo.currentText()}。'
         else:
             note += f'使用本机 {family}。'
+        note += f' 估计行距 {spacing:.2f} pt。' if spacing else ' 未检测到同列相邻行，行距使用自动。'
         self.sample_label.setText(note)
         self.mode.setCurrentIndex(0)
         self.content_changed()
