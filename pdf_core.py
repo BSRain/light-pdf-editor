@@ -100,3 +100,68 @@ def text_spans(page):
                                    color=span['color'], bold=bool(span['flags'] & 16),
                                    horizontal=abs(direction.y) < 0.02 and direction.x > 0.98))
     return result
+
+
+def text_characters(page):
+    """Stable per-page character IDs, in visible coordinates; no image extraction."""
+    matrix = page.rotation_matrix
+    result = []
+    flags = (fitz.TEXTFLAGS_RAWDICT & ~fitz.TEXT_PRESERVE_IMAGES) | fitz.TEXT_INHIBIT_SPACES
+    for block in page.get_text('rawdict', flags=flags)['blocks']:
+        for line in block.get('lines', []):
+            for span in line['spans']:
+                for char in span['chars']:
+                    result.append(dict(id=len(result), text=char['c'],
+                                       bbox=list(fitz.Rect(char['bbox']) * matrix)))
+    return result
+
+
+def delete_characters(page, ids):
+    """Use exclusive glyph regions so adjacent/overlapping glyphs are protected."""
+    if any(a.type[0] == fitz.PDF_ANNOT_REDACT for a in (page.annots() or [])):
+        raise ValueError('本页有已有的涂黑标记，请先在原软件中处理这些标记。')
+    chars = text_characters(page)
+    selected = set(ids)
+    if not selected or not selected.issubset(range(len(chars))):
+        raise ValueError('文字选区已失效，请重新选择。')
+    protected = [fitz.Rect(c['bbox']) * page.derotation_matrix for c in chars if c['id'] not in selected]
+    regions = []
+    for char in chars:
+        if char['id'] not in selected:
+            continue
+        box = fitz.Rect(char['bbox']) * page.derotation_matrix
+        pieces = [box]
+        for other in protected:
+            if not box.intersects(other):
+                continue
+            remaining = []
+            for part in pieces:
+                overlap = part & other
+                if overlap.is_empty:
+                    remaining.append(part)
+                    continue
+                remaining.extend(r for r in (
+                    fitz.Rect(part.x0, part.y0, overlap.x0, part.y1),
+                    fitz.Rect(overlap.x1, part.y0, part.x1, part.y1),
+                    fitz.Rect(overlap.x0, part.y0, overlap.x1, overlap.y0),
+                    fitz.Rect(overlap.x0, overlap.y1, overlap.x1, part.y1)
+                ) if r.width > 0.1 and r.height > 0.1)
+            pieces = remaining
+            if not pieces:
+                break
+        if not pieces:
+            raise ValueError('所选字符与其他文字完全重叠，无法单独删除。请扩大选区包含重叠文字。')
+        region = max(pieces, key=lambda r: r.get_area())
+        dx, dy = min(0.1, region.width / 4), min(0.1, region.height / 4)
+        regions.append(fitz.Rect(region.x0 + dx, region.y0 + dy, region.x1 - dx, region.y1 - dy))
+    for region in regions:
+        page.add_redact_annot(region, fill=False, cross_out=False)
+    page.apply_redactions(images=0, graphics=0, text=0)
+    # Confirm geometry as well as text: identical letters elsewhere must survive.
+    expected = [c for c in chars if c['id'] not in selected]
+    actual = text_characters(page)
+    if len(expected) != len(actual) or any(
+        a['text'] != b['text'] or any(abs(x - y) > 0.05 for x, y in zip(a['bbox'], b['bbox']))
+        for a, b in zip(expected, actual)
+    ):
+        raise ValueError('此 PDF 的字符布局无法安全分离，已取消删除并保留原文。')

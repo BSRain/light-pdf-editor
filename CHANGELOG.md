@@ -3,6 +3,31 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.3.0 — 2026-09-22
+
+### 新增与修复 / Added and fixed
+
+- 精细删除：单击选择字符，或框选字符中心；红色预览、选中字数、Delete 提交、Esc 取消。
+  Precise deletion: click a character or box-select character centers, review red highlights and counts, Delete to apply, Esc to cancel.
+- 删除前寻找不与未选文字相交的区域，删除后核对未选字符的内容和位置；失败时恢复原文。
+  Exclusive redaction regions protect neighboring glyphs; post-edit text/geometry validation rolls back unsupported layouts.
+- 重做 Ctrl+Y / Ctrl+Shift+Z，支持跨页和加密文件；失败编辑保留重做分支，新编辑清空分支。
+  Redo supports pages and encrypted files. Failed edits preserve the redo branch; new edits clear it.
+- 撤销 / 重做共享历史预算；修复删除模式下中键平移被悬停逻辑截获。
+  Shared undo/redo history budget; middle-button panning now works in deletion modes.
+- 字符高亮合并成一个图形路径，避免每个字符创建一个场景对象。
+  Character highlights share one graphics path instead of one scene object per character.
+
+### 验证 / Validation
+
+23 项本地回归测试：包含四种旋转下中英文字符删除与导出、紧邻两行保护、重叠字符拒绝与回滚、裁切斜体页面、跨页与加密撤销 / 重做，以及 Qt 选择、取消、删除和快捷键。运行生成文档缩放基准并检查界面截图。
+23 local tests include mixed-text deletion/export at four rotations, close-line protection, overlap rejection and rollback, cropped italic pages, multi-page/encrypted undo/redo, and Qt selection/cancel/delete/shortcuts. Generated-document zoom benchmarks and UI screenshots were checked.
+
+### 仍在计划中 / Still planned
+
+自动按词选择、重新选中已应用文字后移动和修改，继续放在 v0.3.x。扫描图片及轮廓文字仍不支持删除；完全重叠的字符须一并选择；删除不自动重排文字。
+Automatic word selection and re-editing applied text remain planned for v0.3.x. Scanned/outlined text is unsupported; fully overlapping characters must be selected together; deletion does not reflow text.
+
 ## v0.2.0 — 2026-09-22
 
 ### 新增 / Added

@@ -11,7 +11,7 @@ from PySide6.QtCore import QPoint, QPointF, Qt, QMimeData, QUrl
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtTest import QTest
-from pdf_core import add_text, delete_text, windows_fonts, text_spans
+from pdf_core import add_text, delete_text, windows_fonts, text_spans, text_characters
 from pdf_worker import Engine
 from pdf_editor import Editor
 from alignment import snap_box, nearest_span, match_font
@@ -118,6 +118,142 @@ class CoreTests(unittest.TestCase):
             self.assertEqual((pix.width, pix.height), (512, 512))
             self.assertTrue(engine.run(dict(kind='tile', index=0, revision=-1))['stale'])
             engine.doc.close()
+
+    def test_precise_mixed_text_all_rotations_and_export(self):
+        for rotation in (0, 90, 180, 270):
+            with self.subTest(rotation=rotation), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / 'mixed.pdf'
+                with fitz.open() as doc:
+                    p = doc.new_page(width=600, height=800)
+                    p.set_rotation(rotation)
+                    add_text(p, 40, 80, '中文 ABC 123\n下一行 Keep', 18, (0, 0, 0),
+                             windows_fonts()['微软雅黑'], 350, 100)
+                    doc.save(path)
+                engine = Engine()
+                data = engine.run(dict(kind='open', path=str(path)))
+                before = data['characters']
+                ids = [c['id'] for c in before if c['text'] in '文B2']
+                result = engine.run(dict(kind='delete_chars', index=0, revision=engine.revision, ids=ids))
+                self.assertEqual(''.join(c['text'] for c in result['characters']),
+                                 ''.join(c['text'] for c in before if c['id'] not in ids))
+                restored = engine.run(dict(kind='undo'))
+                self.assertEqual(restored['characters'], before)
+                self.assertTrue(restored['can_redo'])
+                redone = engine.run(dict(kind='redo'))
+                self.assertEqual(result['characters'], redone['characters'])
+                output = Path(directory) / 'saved.pdf'
+                engine.run(dict(kind='save', path=str(output)))
+                with fitz.open(output) as saved:
+                    self.assertEqual(text_characters(saved[0]), result['characters'])
+                engine.doc.close()
+
+    def test_precise_deletion_protects_close_lines_images_and_vectors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'tight.pdf'
+            with fitz.open() as doc:
+                p = doc.new_page()
+                p.insert_text((50, 90), 'UPPER', fontsize=20)
+                p.insert_text((50, 105), 'LOWER', fontsize=20)
+                p.draw_rect(fitz.Rect(45, 65, 150, 115), color=(1, 0, 0))
+                pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 20, 20), False)
+                pix.clear_with(100)
+                p.insert_image(fitz.Rect(40, 60, 160, 130), pixmap=pix, overlay=False)
+                doc.save(path)
+            e = Engine()
+            data = e.run(dict(kind='open', path=str(path)))
+            original = data['characters']
+            pixels = e.doc.extract_image(e.doc[0].get_images()[0][0])['image']
+            drawings = e.doc[0].get_drawings()
+            # Bounding boxes overlap the adjacent line, but the lower glyph has an exclusive region.
+            result = e.run(dict(kind='delete_chars', index=0, revision=e.revision, ids=[5]))
+            self.assertEqual(''.join(c['text'] for c in result['characters']), 'UPPEROWER')
+            self.assertEqual(e.doc.extract_image(e.doc[0].get_images()[0][0])['image'], pixels)
+            self.assertEqual(len(e.doc[0].get_drawings()), len(drawings))
+            e.run(dict(kind='undo'))
+            self.assertEqual(text_characters(e.doc[0]), original)
+            e.doc.close()
+
+    def test_overlapping_character_rejection_is_transactional(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'overlap.pdf'
+            with fitz.open() as doc:
+                p = doc.new_page()
+                p.insert_text((50, 80), 'AAA', fontsize=20)
+                p.insert_text((50, 80), 'AAA', fontsize=20)
+                doc.save(path)
+            e = Engine()
+            before = e.run(dict(kind='open', path=str(path)))
+            with self.assertRaisesRegex(ValueError, '重叠'):
+                e.run(dict(kind='delete_chars', revision=e.revision, ids=[0]))
+            self.assertEqual(text_characters(e.doc[0]), before['characters'])
+            self.assertFalse(e.history)
+            with self.assertRaisesRegex(ValueError, '页面已变化'):
+                e.run(dict(kind='delete_chars', revision=e.revision - 1, ids=[0]))
+            result = e.run(dict(kind='delete_chars', revision=e.revision, ids=[0, 3]))
+            self.assertEqual(''.join(c['text'] for c in result['characters']), 'AAAA')
+            e.doc.close()
+
+    def test_redo_across_pages_and_failed_edit_keeps_redo(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'pages.pdf'
+            fixture(path)
+            e = Engine()
+            e.run(dict(kind='open', path=str(path)))
+            originals = [text_characters(p) for p in e.doc]
+            e.run(dict(kind='delete_chars', index=0, revision=e.revision, ids=[0]))
+            e.run(dict(kind='delete_chars', index=1, revision=e.revision, ids=[0]))
+            self.assertEqual(e.run(dict(kind='undo', index=0))['index'], 1)
+            self.assertEqual(e.run(dict(kind='undo', index=1))['index'], 0)
+            self.assertEqual([text_characters(p) for p in e.doc], originals)
+            with self.assertRaises(ValueError):
+                e.run(dict(kind='delete_chars', index=0, revision=e.revision - 1, ids=[0]))
+            self.assertTrue(e.future)
+            self.assertEqual(e.run(dict(kind='redo', index=1))['index'], 0)
+            self.assertEqual(e.run(dict(kind='redo', index=0))['index'], 1)
+            self.assertEqual([len(text_characters(p)) for p in e.doc], [len(c) - 1 for c in originals])
+            e.doc.close()
+
+    def test_precise_cropped_italic_page(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'cropped.pdf'
+            with fitz.open() as doc:
+                p = doc.new_page(width=600, height=800)
+                p.insert_text((100, 180), 'Italic AVAVA text', fontname='heit', fontsize=24)
+                p.set_cropbox(fitz.Rect(50, 80, 550, 700))
+                p.set_rotation(90)
+                doc.save(path)
+            e = Engine()
+            data = e.run(dict(kind='open', path=str(path)))
+            ids = [c['id'] for c in data['characters'] if c['text'] == 'V']
+            after = e.run(dict(kind='delete_chars', revision=e.revision, ids=ids))
+            self.assertEqual(''.join(c['text'] for c in after['characters']), 'Italic AAA text')
+            e.doc.close()
+
+    def test_redo_branch_save_and_encryption(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'encrypted.pdf'
+            fixture(path, encrypted=True)
+            e = Engine()
+            data = e.run(dict(kind='open', path=str(path), password='user-test'))
+            ids = [c['id'] for c in data['characters'] if c['text'] == 'D']
+            result = e.run(dict(kind='delete_chars', revision=e.revision, ids=ids))
+            e.run(dict(kind='undo'))
+            output = Path(directory) / 'saved.pdf'
+            e.run(dict(kind='save', path=str(output)))
+            self.assertFalse(e.dirty)
+            e.run(dict(kind='redo'))
+            self.assertTrue(e.dirty)
+            self.assertEqual(text_characters(e.doc[0]), result['characters'])
+            e.run(dict(kind='undo'))
+            self.assertFalse(e.dirty)
+            e.run(dict(kind='delete_chars', revision=e.revision, ids=ids))
+            self.assertFalse(e.future)
+            e.run(dict(kind='save', path=str(output)))
+            with fitz.open(output) as doc:
+                self.assertTrue(doc.needs_pass)
+                self.assertTrue(doc.authenticate('user-test'))
+                self.assertEqual(text_characters(doc[0]), result['characters'])
+            e.doc.close()
 
     def test_chinese_bold_and_font_embedding(self):
         for name in ('微软雅黑', '宋体'):
@@ -307,6 +443,58 @@ class QtTests(unittest.TestCase):
         with fitz.open(output) as doc:
             self.assertNotIn('DELETE', doc[0].get_text())
             self.assertTrue(doc[0].get_drawings())
+
+    def test_precise_click_preview_delete_undo_redo(self):
+        e = self.editor
+        e.mode.setCurrentIndex(e.mode.findData('precise'))
+        target = next(c for c in e.characters if c['text'] == 'D')
+        x0, y0, x1, y1 = target['bbox']
+        point = e.view.mapFromScene(QPointF((x0 + x1) / 2, (y0 + y1) / 2))
+        original = list(e.characters)
+        QTest.mouseClick(e.view.viewport(), Qt.MouseButton.LeftButton, pos=point)
+        self.assertEqual(e.view.selected_chars, [target['id']])
+        self.assertEqual(e.characters, original)
+        self.assertFalse(e.dirty)
+        self.assertTrue(e.delete_chars_action.isEnabled())
+        QTest.keyClick(e.view.viewport(), Qt.Key.Key_Delete)
+        self.wait(lambda: not e.busy)
+        deleted = list(e.characters)
+        self.assertEqual(len(deleted), len(original) - 1)
+        self.assertFalse(e.view.selected_chars)
+        e.undo()
+        self.wait(lambda: not e.busy)
+        self.assertEqual(e.characters, original)
+        self.assertTrue(e.redo_action.isEnabled())
+        QTest.keyClick(e.view.viewport(), Qt.Key.Key_Y, Qt.KeyboardModifier.ControlModifier)
+        self.wait(lambda: not e.busy)
+        self.assertEqual(e.characters, deleted)
+
+    def test_precise_drag_preview_cancel_and_page_change(self):
+        e = self.editor
+        e.mode.setCurrentIndex(e.mode.findData('precise'))
+        chars = [c for c in e.characters if c['text'] in 'DELET']
+        first = next(c for c in chars if c['text'] == 'D')
+        targets = e.characters[first['id']:first['id'] + 3]
+        x0 = targets[0]['bbox'][0]
+        y0 = min(c['bbox'][1] for c in targets)
+        x1 = targets[-1]['bbox'][2]
+        y1 = max(c['bbox'][3] for c in targets)
+        start = e.view.mapFromScene(QPointF(x0 + 1, y0 + 1))
+        end = e.view.mapFromScene(QPointF(x1 - 1, y1 - 1))
+        QTest.mousePress(e.view.viewport(), Qt.MouseButton.LeftButton, pos=start)
+        QTest.mouseMove(e.view.viewport(), end, delay=20)
+        QTest.mouseRelease(e.view.viewport(), Qt.MouseButton.LeftButton, pos=end)
+        self.assertEqual(e.view.selected_chars, [c['id'] for c in targets])
+        self.assertFalse(e.dirty)
+        QTest.keyClick(e.view.viewport(), Qt.Key.Key_Escape)
+        self.assertFalse(e.view.selected_chars)
+        e.view.select_characters(e.page_rect, QPointF())
+        self.assertTrue(e.view.selected_chars)
+        e.turn(1)
+        self.wait(lambda: not e.busy)
+        self.assertFalse(e.view.selected_chars)
+        self.assertFalse(e.view.precise_items)
+        self.assertFalse(e.delete_chars_action.isEnabled())
 
     def test_delete_key_removes_draft_not_original(self):
         e = self.editor

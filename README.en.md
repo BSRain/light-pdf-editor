@@ -1,4 +1,4 @@
-# Light PDF Editor v0.2.0 · Qt Edition · Personal Use
+# Light PDF Editor v0.3.0 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -32,13 +32,18 @@ Changing font or size preserves the first baseline where page bounds permit. Bas
 
 - Chinese and English text, multiline layout, font size, color, bold, and local TTF / OTF / TTC fonts.
 - Native bold font variants when available, with synthetic stroke bold otherwise. Inserted fonts are embedded in the output.
+- **精细删除** (Precise delete, recommended): click one character or drag a box around character centers. Red highlighting is only a preview. Click **删除所选** or press Delete / Backspace with the page focused to apply; Esc cancels. Unselected character text and geometry are checked after removal, with rollback when separation is unsafe.
 - **框选删除** (Box delete): drag a rectangle to remove intersecting characters.
-- **点选删除** (Click delete): hover over original text to highlight the PDF text span in red, then click to remove that entire span. Use box deletion for smaller regions.
+- **点选删除** (Click delete): hover over original text to highlight the PDF text span in red, then click to remove that entire span. Use precise deletion for smaller regions.
 - Original-text deletion supports Ctrl+Z undo and preserves images and vector graphics. Scanned-image text is unsupported.
 - Click a draft box to focus it, then press **Delete / Backspace** to discard that draft without changing the source document.
-- Undo retains up to 20 steps, with fewer steps for large documents. Undo applied text before repositioning it.
+- **Redo** uses Ctrl+Y or Ctrl+Shift+Z. A new edit after undo clears the redo branch. Undo and redo share a 20-step / 128 MB snapshot budget, retaining at least one snapshot. Large documents may retain fewer steps. Applied text still needs to be undone before repositioning.
 - Save as exports a separate file and refuses to overwrite the opened original. Apply or cancel the pending draft first.
 - Password-protected PDFs can be opened by entering their password; undo and export preserve encryption.
+
+![Precise character deletion preview](ui_precision.png)
+
+Precise deletion operates on extractable PDF characters and leaves gaps in place. Fully overlapping characters must be selected together. Automatic word selection, scanned-image text and outlined text are not supported.
 
 ## Controls
 
@@ -46,7 +51,9 @@ Changing font or size preserves the first baseline where page bounds permit. Bas
 | --- | --- |
 | Open / Save as | Ctrl+O / Ctrl+S |
 | Apply / Cancel draft | Ctrl+Enter / Esc |
-| Undo / Bold | Ctrl+Z / Ctrl+B |
+| Undo / Redo | Ctrl+Z / Ctrl+Y (or Ctrl+Shift+Z) |
+| Bold | Ctrl+B |
+| Delete / Cancel precise selection | Delete / Esc with page focused |
 | Delete focused draft | Delete / Backspace |
 | Zoom around pointer | Mouse wheel |
 | Pan | Middle-button drag, or Pan tool |
@@ -65,7 +72,7 @@ Changing font or size preserves the first baseline where page bounds permit. Bas
 - The tile cache has a 64 MiB budget, in addition to visible graphics, the thumbnail, and the PDF engine's own memory. Pending viewport requests are replaced by the latest batch, and stale document results are ignored.
 - Draft text is a separate transparent layer. Moving it does not clone or render the underlying page. Text, style, or box-size changes request a new text layout.
 
-On this machine, generated text, 1,600-line vector, and large-image fixtures produced median wheel-dispatch-plus-GUI-processing times of about 4.5–4.7 ms. **This is not complete PDF render latency or a frame-rate guarantee**, and it is not directly comparable with older benchmarks that measured different operations. The benchmark is included for reproduction.
+On this machine, generated text, 1,600-line vector, and large-image fixtures produced median wheel-dispatch-plus-GUI-processing times of about 3.2–3.5 ms (measured locally during v0.3.0 development). **This is not complete PDF render latency or a frame-rate guarantee**, and it is not directly comparable with older benchmarks that measured different operations. The benchmark is included for reproduction.
 
 ## Development and verification
 
@@ -77,7 +84,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe benchmark_editor.py
 ```
 
-Tests cover actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
+23 tests cover precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
 
 | File | Purpose |
 | --- | --- |

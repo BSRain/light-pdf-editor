@@ -6,7 +6,7 @@ import sys
 import tempfile
 import time
 import pymupdf as fitz
-from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt
 from PySide6.QtGui import QWheelEvent, QFont
 from PySide6.QtWidgets import QApplication
 from PySide6.QtTest import QTest
@@ -94,6 +94,11 @@ def run():
                 wait_until(lambda: editor.draft and editor.draft.valid and not editor.client.tiles, editor)
                 QTest.qWait(150)
                 editor.grab().save('ui_preview.png')
+                editor.cancel()
+                editor.mode.setCurrentIndex(editor.mode.findData('precise'))
+                editor.view.select_characters(QRectF(48, 40, 44, 32), QPointF())
+                QTest.qWait(150)
+                editor.grab().save('ui_precision.png')
                 editor.cancel()
             editor.client.close()
     finally:
