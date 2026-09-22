@@ -1,4 +1,4 @@
-# Light PDF Editor v0.3.0 · Qt Edition · Personal Use
+# Light PDF Editor v0.3.1 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -28,22 +28,33 @@ The initial Qt download is larger than the old version; subsequent use can be of
 
 Changing font or size preserves the first baseline where page bounds permit. Baseline snapping currently supports extractable text that is horizontal on screen. Scans, outlined glyphs, and vertical text do not provide supported baseline targets.
 
+## Re-edit inserted text
+
+1. After applying text, choose **编辑新增文字** (Edit inserted text) and click its box.
+2. Change its text, font, size, color or bold state, drag to move, or resize using the handles.
+3. The preview hides the old text while editing. **应用修改** / Ctrl+Enter replaces it; Esc restores the original state.
+4. An update is one undoable/redoable operation. Saving does not end the session, so editing can continue after export.
+
+**Scope:** only text inserted since opening this document is tracked. Reopening starts a new session; exported text remains ordinary PDF content. Text deletion retires previously inserted boxes on that page because page contents are rewritten; undoing the deletion restores them. Overlapping boxes select the most recently inserted box first.
+
+![Re-editing an inserted text box](ui_reedit.png)
+
 ## Editing and saving
 
 - Chinese and English text, multiline layout, font size, color, bold, and local TTF / OTF / TTC fonts.
 - Native bold font variants when available, with synthetic stroke bold otherwise. Inserted fonts are embedded in the output.
-- **精细删除** (Precise delete, recommended): click one character or drag a box around character centers. Red highlighting is only a preview. Click **删除所选** or press Delete / Backspace with the page focused to apply; Esc cancels. Unselected character text and geometry are checked after removal, with rollback when separation is unsafe.
+- **精细删除** (Precise delete, recommended): click one character, double-click a token, or drag a box around character centers. Red highlighting is only a preview. Click **删除所选** or press Delete / Backspace with the page focused to apply; Esc cancels. Unselected character text and geometry are checked after removal, with rollback when separation is unsafe.
 - **框选删除** (Box delete): drag a rectangle to remove intersecting characters.
 - **点选删除** (Click delete): hover over original text to highlight the PDF text span in red, then click to remove that entire span. Use precise deletion for smaller regions.
 - Original-text deletion supports Ctrl+Z undo and preserves images and vector graphics. Scanned-image text is unsupported.
 - Click a draft box to focus it, then press **Delete / Backspace** to discard that draft without changing the source document.
-- **Redo** uses Ctrl+Y or Ctrl+Shift+Z. A new edit after undo clears the redo branch. Undo and redo share a 20-step / 128 MB snapshot budget, retaining at least one snapshot. Large documents may retain fewer steps. Applied text still needs to be undone before repositioning.
+- **Redo** uses Ctrl+Y or Ctrl+Shift+Z. A new edit after undo clears the redo branch. Undo and redo share a 20-step / 128 MB snapshot budget, retaining at least one snapshot. Large documents may retain fewer steps. Use Edit inserted text to modify and reposition text created in this session.
 - Save as exports a separate file and refuses to overwrite the opened original. Apply or cancel the pending draft first.
 - Password-protected PDFs can be opened by entering their password; undo and export preserve encryption.
 
 ![Precise character deletion preview](ui_precision.png)
 
-Precise deletion operates on extractable PDF characters and leaves gaps in place. Fully overlapping characters must be selected together. Automatic word selection, scanned-image text and outlined text are not supported.
+Precise deletion operates on extractable PDF characters and leaves gaps in place. Fully overlapping characters must be selected together. Double-click selects whitespace/punctuation-delimited tokens, including apostrophes in contractions. Chinese selects contiguous character runs, without semantic segmentation. Scanned-image and outlined text are unsupported.
 
 ## Controls
 
@@ -53,6 +64,7 @@ Precise deletion operates on extractable PDF characters and leaves gaps in place
 | Apply / Cancel draft | Ctrl+Enter / Esc |
 | Undo / Redo | Ctrl+Z / Ctrl+Y (or Ctrl+Shift+Z) |
 | Bold | Ctrl+B |
+| Select a token in precise deletion | Double-click text |
 | Delete / Cancel precise selection | Delete / Esc with page focused |
 | Delete focused draft | Delete / Backspace |
 | Zoom around pointer | Mouse wheel |
@@ -70,6 +82,7 @@ Precise deletion operates on extractable PDF characters and leaves gaps in place
 - Opening, text extraction, editing, previews, saving, and rasterization run in a separate process.
 - After approximately 80 ms without viewport changes, the UI requests only visible 512-pixel tiles. A low-resolution page thumbnail remains underneath while sharp tiles arrive.
 - The tile cache has a 64 MiB budget, in addition to visible graphics, the thumbnail, and the PDF engine's own memory. Pending viewport requests are replaced by the latest batch, and stale document results are ignored.
+- Re-editing temporarily holds a document copy for the background preview without the old text. Apply/cancel releases it. Export also uses a copy so compaction cannot invalidate the current session’s content references.
 - Draft text is a separate transparent layer. Moving it does not clone or render the underlying page. Text, style, or box-size changes request a new text layout.
 
 On this machine, generated text, 1,600-line vector, and large-image fixtures produced median wheel-dispatch-plus-GUI-processing times of about 3.2–3.5 ms (measured locally during v0.3.0 development). **This is not complete PDF render latency or a frame-rate guarantee**, and it is not directly comparable with older benchmarks that measured different operations. The benchmark is included for reproduction.
@@ -80,11 +93,11 @@ On this machine, generated text, 1,600-line vector, and large-image fixtures pro
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe pdf_editor.py
-.\.venv\Scripts\python.exe -m unittest -v test_editor.py
+.\.venv\Scripts\python.exe -m unittest -v
 .\.venv\Scripts\python.exe benchmark_editor.py
 ```
 
-23 tests cover precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
+33 tests cover reselect/move/update/cancel, preservation of overlapping original text, continued editing after export, encrypted object replacement, double-click token selection, precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
 
 | File | Purpose |
 | --- | --- |
@@ -92,7 +105,7 @@ python -m venv .venv
 | `pdf_worker.py` | Isolated PDF owner and JSON pipe protocol |
 | `pdf_core.py` | Fonts, insertion/deletion, text geometry extraction |
 | `alignment.py` | Baseline/edge snapping and local font matching |
-| `test_editor.py` | Core and Qt integration tests |
+| `test_editor.py` / `test_sessions.py` | Core, Qt and session text editing tests |
 | `benchmark_editor.py` | Generated-page interaction benchmark |
 | `start.bat` | Windows launcher |
 | `version.py` / `CHANGELOG.md` | Version metadata and release history |

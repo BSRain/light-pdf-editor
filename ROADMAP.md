@@ -3,18 +3,18 @@
 > 自用 / Personal use。以下是计划，不代表已实现；按实际使用反馈调整优先级，不预设发布日期。
 > Planned work, not released features. Priorities follow personal-use feedback; no release dates are promised.
 
-## 当前版本 / Current: v0.3.0
+## 当前版本 / Current: v0.3.1
 
-Qt 界面、独立 PDF 处理进程、可见区域分块渲染、原文基线与边缘吸附、字体样式取样、增删文字、字符选择与删除预览、相邻文字保护、加粗、撤销 / 重做、拖放、加密文件保存。
+Qt 界面、独立 PDF 处理进程、可见区域分块渲染、原文基线与边缘吸附、字体样式取样、增删文字、字符 / 词段选择与删除预览、本次会话新增文字再次编辑、相邻文字保护、加粗、撤销 / 重做、拖放、加密文件保存。
 
-Qt UI, isolated PDF worker, viewport tiles, baseline/edge snapping, style sampling, text insertion/deletion, character selection with deletion preview and neighboring-text checks, bold, undo/redo, drag-and-drop, encrypted export.
+Qt UI, isolated PDF worker, viewport tiles, baseline/edge snapping, style sampling, text insertion/deletion, character/token selection with deletion preview, session-created text re-editing, neighboring-text checks, bold, undo/redo, drag-and-drop, encrypted export.
 
 ## 分阶段计划 / Next versions
 
 | 版本 / Version | 重点 / Focus | 计划内容 / Planned work | 验收标准 / Acceptance |
 | --- | --- | --- | --- |
 | v0.3.x | 稳定性 / Stability | 收集经脱敏的实际工作 PDF 用例；修复文字误删、边缘裁切、缩放卡顿和进程异常；完善错误提示。 / Add sanitized real-world fixtures; fix deletion, clipping, zoom stalls and worker errors. | 每个修复有可复现用例；既有保存、加密和对齐测试全部通过。 / Reproducible cases and passing regression tests. |
-| v0.3.x | 后续精细编辑 / Further precise editing | 自动按词选择；本次会话新增文字可再次选中移动和修改。字符删除、预览及重做已在 v0.3.0 完成。 / Automatic word selection; reselect and edit session-created text. Character deletion, preview and redo shipped in v0.3.0. | 修改新增文字后，撤销 / 重做内容与位置一致。 / Consistent content and positions after undo/redo of text-object edits. |
+| v0.3.x | 精细编辑完善 / Editing refinements | v0.3.1 已完成词段选择与会话内新增文字重编辑；后续改善重叠框选择、页面删除后的编辑记录保留。 / Token selection and session text re-editing shipped in v0.3.1; next improve overlapping-box selection and tracking across redactions. | 保留原文和相邻内容，操作可撤销 / 重做。 / Preserve original/neighboring content with undo/redo. |
 | v0.4.0 | 排版对齐 / Alignment | 更准确的字体家族和粗细匹配；多行行距取样；对齐到列、表格单元格和最近文本行；优化吸附优先级。 / Better font matching, line-spacing sampling, columns/table alignment and snap priorities. | 多栏与表格用例可稳定对齐；字体替代有明确提示。 / Stable alignment on multi-column/table fixtures, explicit font fallback. |
 | v0.5.0 | 桌面交付 / Desktop delivery | Windows 便携 EXE；崩溃恢复草稿；大文档缓存调优；高 DPI 与多显示器验证。 / Portable Windows EXE, draft recovery, large-file tuning, high-DPI/multi-monitor checks. | 无 Python 环境可运行；恢复草稿不覆盖原稿；明确缓存上限并实测交互延迟。 / Runs without Python; recovery preserves originals; measured cache/latency limits. |
 
@@ -27,7 +27,7 @@ OCR, scanned-image erasure, document-wide reflow, cloud processing, collaborativ
 ## 版本规则 / Versioning
 
 - `main`：已完成本地回归验证的版本；发布提交使用 `vX.Y.Z` 标签。 / Tested main branch, releases tagged `vX.Y.Z`.
-- `0.x` 阶段允许交互与内部架构调整；补丁号用于兼容修复。 / During 0.x, UI/architecture may evolve; patch versions are compatible fixes.
+- `0.x` 阶段允许交互与内部架构调整；补丁号用于兼容修复及小范围功能迭代。 / During 0.x, UI/architecture may evolve; patch versions cover compatible fixes and small feature iterations.
 - 每次发布更新 `version.py`、`CHANGELOG.md` 和中英文说明，运行回归测试，推送提交及标签。 / Update version, changelog and bilingual docs; test, commit and tag.
 - 用户文档、字体、虚拟环境和授权凭据不进入仓库。 / Do not commit user PDFs, fonts, environments or credentials.
 - 不以重写历史的方式替换已发布标签。 / Never replace published tags by rewriting history.

@@ -107,12 +107,14 @@ def text_characters(page):
     matrix = page.rotation_matrix
     result = []
     flags = (fitz.TEXTFLAGS_RAWDICT & ~fitz.TEXT_PRESERVE_IMAGES) | fitz.TEXT_INHIBIT_SPACES
+    line_id = 0
     for block in page.get_text('rawdict', flags=flags)['blocks']:
         for line in block.get('lines', []):
             for span in line['spans']:
                 for char in span['chars']:
                     result.append(dict(id=len(result), text=char['c'],
-                                       bbox=list(fitz.Rect(char['bbox']) * matrix)))
+                                       bbox=list(fitz.Rect(char['bbox']) * matrix), line=line_id))
+            line_id += 1
     return result
 
 

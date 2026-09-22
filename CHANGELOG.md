@@ -3,6 +3,29 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.3.1 — 2026-09-22
+
+### 新增与改进 / Added and improved
+
+- “编辑新增文字”：重新选择本次会话新增的文字，移动、拉伸、改字及调整样式；旧文字从预览隐藏，应用后替换，取消恢复。修改支持撤销 / 重做。
+  Re-edit session-created text: move, resize, change text/style, preview without the old text, apply replacement or cancel. Updates support undo/redo.
+- 精细删除模式双击选择词段，按空白 / 标点分界；中文选择连续汉字段，不做语义分词。
+  Double-click token selection in precise deletion, using whitespace/punctuation boundaries; contiguous CJK runs, without semantic segmentation.
+- 替换新增文字通过移除对应页面内容引用完成，不涂除覆盖区域，因此保留下方原文。另存为使用副本整理，保存后仍能继续编辑当前会话。
+  Replacements detach the inserted content references instead of redacting the area, preserving underlying text. Export compacts a copy and retains active session references.
+- 加密文档、旋转页面及失败编辑恢复纳入回归；文字删除后明确提示该页已有文字框的编辑限制。
+  Encryption, rotated pages and failed-edit recovery are covered by regressions; page deletion reports its impact on existing text-box editing.
+
+### 验证 / Validation
+
+33 项回归测试通过，含 Qt 重新选中 / 拖动 / 改字 / 取消 / 双击选词、跨页撤销重做、重叠原文保护、四种旋转的加密导出、保存后继续编辑。已运行缩放基准并检查重新编辑界面截图。
+33 passing tests include Qt reselect/drag/update/cancel/token selection, cross-page history, overlapping-original protection, encrypted export at four rotations, and continued editing after save. Zoom benchmarks and re-edit UI screenshots were checked.
+
+### 限制 / Limits
+
+重新编辑仅跟踪本次打开后新增的文字，关闭 / 重开后不恢复文字框。删除文字会使该页先前新增的文字框失去编辑记录，撤销可恢复；其他页不受影响。重叠框优先选择后添加的框。
+Re-editing tracks text inserted during the current open-document session only. Reopening does not restore boxes. Redaction retires existing boxes on that page; undo restores them, and other pages are unaffected. Overlaps select the most recently inserted box.
+
 ## v0.3.0 — 2026-09-22
 
 ### 新增与修复 / Added and fixed

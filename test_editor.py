@@ -306,7 +306,7 @@ class QtTests(unittest.TestCase):
         e.client.close()
         e.busy = False
         e.dirty = False
-        e.cancel()
+        e.cancel(local=True)
         e.close()
         self.warning.stop()
         self.critical.stop()
@@ -495,6 +495,83 @@ class QtTests(unittest.TestCase):
         self.assertFalse(e.view.selected_chars)
         self.assertFalse(e.view.precise_items)
         self.assertFalse(e.delete_chars_action.isEnabled())
+
+    def test_reselect_move_modify_undo_redo(self):
+        e = self.editor
+        self.make_draft()
+        e.apply()
+        self.wait(lambda: not e.busy)
+        obj = e.objects[-1]
+        spec = dict(obj['spec'])
+        e.mode.setCurrentIndex(e.mode.findData('edit'))
+        point = e.view.mapFromScene(QPointF(spec['x'] + 15, spec['y'] + 15))
+        QTest.mouseClick(e.view.viewport(), Qt.MouseButton.LeftButton, pos=point)
+        self.wait(lambda: not e.busy and e.draft and e.draft.valid)
+        self.assertEqual(e.editing_id, obj['id'])
+        self.assertFalse(any('Aligned' in span['text'] for span in e.spans))
+        e.snap.setChecked(False)
+        before = e.draft.pos()
+        start = e.view.mapFromScene(e.draft.mapToScene(QPointF(30, 30)))
+        QTest.mousePress(e.view.viewport(), Qt.MouseButton.LeftButton, pos=start)
+        QTest.mouseMove(e.view.viewport(), start + QPoint(20, 20), delay=20)
+        QTest.mouseRelease(e.view.viewport(), Qt.MouseButton.LeftButton, pos=start + QPoint(20, 20))
+        self.assertGreater(e.draft.x(), before.x())
+        e.text_input.setPlainText('Edited session')
+        e.size.setValue(16)
+        self.wait(lambda: e.draft.valid)
+        moved_x = e.draft.x()
+        e.apply()
+        self.wait(lambda: not e.busy and e.draft is None)
+        self.assertTrue(any('Edited' in span['text'] for span in e.spans))
+        self.assertFalse(any('Aligned' in span['text'] for span in e.spans))
+        self.assertAlmostEqual(e.objects[-1]['spec']['x'], moved_x)
+        e.undo()
+        self.wait(lambda: not e.busy)
+        self.assertEqual(e.objects[-1]['spec'], spec)
+        e.redo()
+        self.wait(lambda: not e.busy)
+        self.assertEqual(e.objects[-1]['spec']['text'], 'Edited session')
+
+    def test_reedit_cancel_restores_saved_state_and_mode_switch(self):
+        e = self.editor
+        self.make_draft()
+        e.apply()
+        self.wait(lambda: not e.busy)
+        output = Path(self.temp.name) / 'session.pdf'
+        with patch('pdf_editor.QFileDialog.getSaveFileName', return_value=(str(output), 'PDF')):
+            e.save()
+        self.wait(lambda: not e.busy)
+        before = list(e.characters)
+        obj = e.objects[-1]
+        e.mode.setCurrentIndex(e.mode.findData('edit'))
+        e.edit_at(QPointF(obj['bbox'][0] + 15, obj['bbox'][1] + 15))
+        self.wait(lambda: not e.busy and e.draft and e.draft.valid)
+        e.text_input.setPlainText('Discard this')
+        QTest.keyClick(e.view.viewport(), Qt.Key.Key_Escape)
+        self.wait(lambda: not e.busy and e.draft is None)
+        self.assertFalse(e.dirty)
+        self.assertEqual(e.characters, before)
+        e.edit_at(QPointF(obj['bbox'][0] + 15, obj['bbox'][1] + 15))
+        self.wait(lambda: not e.busy and e.draft and e.draft.valid)
+        e.mode.setCurrentIndex(e.mode.findData('precise'))
+        self.wait(lambda: not e.busy and e.draft is None)
+        self.assertEqual(e.characters, before)
+        self.assertIsNone(e.editing_id)
+
+    def test_double_click_selects_word_without_deleting(self):
+        e = self.editor
+        e.mode.setCurrentIndex(e.mode.findData('precise'))
+        char = next(c for c in e.characters if c['text'] == 'D')
+        x0, y0, x1, y1 = char['bbox']
+        point = e.view.mapFromScene(QPointF((x0+x1)/2, (y0+y1)/2))
+        QTest.mouseDClick(e.view.viewport(), Qt.MouseButton.LeftButton, pos=point)
+        QTest.mouseRelease(e.view.viewport(), Qt.MouseButton.LeftButton, pos=point)
+        self.assertEqual(''.join(c['text'] for c in e.characters if c['id'] in e.view.selected_chars), 'DELETE')
+        self.assertFalse(e.dirty)
+        QTest.keyClick(e.view.viewport(), Qt.Key.Key_Delete)
+        self.wait(lambda: not e.busy)
+        self.assertFalse(any('DELETE' in s['text'] for s in e.spans))
+        self.assertTrue(any('ME' in s['text'] for s in e.spans))
 
     def test_delete_key_removes_draft_not_original(self):
         e = self.editor

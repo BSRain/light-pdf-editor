@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QGraphicsView
     QDoubleSpinBox, QCheckBox, QPlainTextEdit, QDockWidget, QFileDialog, QMessageBox,
     QColorDialog, QInputDialog, QLineEdit, QScrollArea, QStyleFactory)
 from pdf_core import windows_fonts
-from alignment import snap_box, nearest_span, match_font
+from alignment import snap_box, nearest_span, match_font, word_at
 from version import __version__
 
 
@@ -315,6 +315,8 @@ class PdfView(QGraphicsView):
             mode = self.editor.mode.currentData()
             if mode == 'sample':
                 self.editor.sample(point)
+            elif mode == 'edit':
+                self.editor.edit_at(point)
             elif mode == 'add':
                 self.editor.place(point)
             elif mode == 'erase':
@@ -386,6 +388,17 @@ class PdfView(QGraphicsView):
             return
         super().mouseReleaseEvent(event)
 
+    def mouseDoubleClickEvent(self, event):
+        if self.editor.mode.currentData() == 'precise' and not self.editor.busy and event.button() == Qt.MouseButton.LeftButton:
+            if self.selection is not None:
+                self.scene().removeItem(self.selection)
+                self.selection, self.selection_start = None, None
+            point = self.mapToScene(event.position().toPoint())
+            self.show_character_selection(word_at(point.x(), point.y(), self.editor.characters))
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
     def clear_character_selection(self):
         for item in self.precise_items:
             self.scene().removeItem(item)
@@ -401,6 +414,9 @@ class PdfView(QGraphicsView):
         else:
             chars = [c for c in self.editor.characters if rect.contains(
                 QPointF((c['bbox'][0] + c['bbox'][2]) / 2, (c['bbox'][1] + c['bbox'][3]) / 2))]
+        self.show_character_selection(chars)
+
+    def show_character_selection(self, chars):
         ids = [c['id'] for c in chars]
         if ids == self.selected_chars:
             return
@@ -465,6 +481,8 @@ class Editor(QMainWindow):
         self.dirty = False
         self.spans = []
         self.characters = []
+        self.objects = []
+        self.editing_id = None
         self.can_undo = False
         self.can_redo = False
         self.page_rect = QRectF()
@@ -534,10 +552,11 @@ class Editor(QMainWindow):
         self.addToolBar(editing)
         editing.addWidget(QLabel('工具  '))
         self.mode = QComboBox()
-        for label, value in [('添加文字', 'add'), ('精细删除（按字符）', 'precise'), ('框选删除', 'delete'), ('点选删除文字', 'erase'), ('取样原文样式', 'sample'), ('平移页面', 'pan')]:
+        for label, value in [('添加文字', 'add'), ('编辑新增文字', 'edit'), ('精细删除（按字符）', 'precise'), ('框选删除', 'delete'), ('点选删除文字', 'erase'), ('取样原文样式', 'sample'), ('平移页面', 'pan')]:
             self.mode.addItem(label, value)
         self.mode.currentIndexChanged.connect(self.mode_changed)
         editing.addWidget(self.mode)
+        self.action(editing, '编辑新增文字', lambda: self.mode.setCurrentIndex(self.mode.findData('edit')))
         self.action(editing, '精细删除', lambda: self.mode.setCurrentIndex(self.mode.findData('precise')))
         self.delete_chars_action = self.action(editing, '删除所选', self.delete_characters)
         self.delete_chars_action.setEnabled(False)
@@ -697,8 +716,14 @@ class Editor(QMainWindow):
             else:
                 self.set_busy(False)
             return
-        if kind in ('open', 'page', 'insert', 'delete', 'delete_chars', 'undo', 'redo'):
+        if kind == 'begin_edit':
+            self.load_page(data)
+            self.restore_object_draft(data['edit_object'])
+        elif kind in ('open', 'page', 'insert', 'delete', 'delete_chars', 'undo', 'redo', 'update_object', 'cancel_edit'):
+            retired_objects = kind in ('delete', 'delete_chars') and bool(self.objects)
             self.load_page(data, fit=kind in ('open', 'page'))
+            if retired_objects:
+                self.statusBar().showMessage('已删除文字。本页先前新增的文字暂不能再次编辑；撤销此次删除可恢复。', 10000)
         elif kind == 'preview':
             if self.draft and request['version'] == self.preview_version:
                 baseline = self.draft.y() + self.draft.offset
@@ -733,12 +758,13 @@ class Editor(QMainWindow):
 
     def load_page(self, data, fit=False):
         self.view.clear_erase_hover()
-        self.cancel()
+        self.cancel(local=True)
         self.path = Path(data['path'])
         self.index, self.count, self.revision = data['index'], data['count'], data['revision']
         self.dirty = data['dirty']
         self.spans = data['spans']
         self.characters = data.get('characters', [])
+        self.objects = data.get('objects', [])
         self.can_undo, self.can_redo = data['can_undo'], data.get('can_redo', False)
         self.page_rect = QRectF(0, 0, data['width'], data['height'])
         scene = self.view.scene()
@@ -832,15 +858,60 @@ class Editor(QMainWindow):
     def mode_changed(self):
         self.view.clear_erase_hover()
         self.view.clear_character_selection()
-        if hasattr(self, 'text_input') and self.mode.currentData() in ('delete', 'erase', 'precise'):
+        if hasattr(self, 'text_input') and (self.editing_id is not None or self.mode.currentData() in ('delete', 'erase', 'precise', 'edit')):
             self.cancel()
         self.draw_guides([])
-        if self.mode.currentData() == 'precise':
-            self.statusBar().showMessage('精细删除：单击选一个字符，拖动选择字符中心落在框内的文字；预览后按 Delete 删除，Esc 取消。')
+        if self.mode.currentData() == 'edit':
+            self.statusBar().showMessage('点击本次打开后新增的文字，重新修改或移动；应用更新，Esc 取消。')
+        elif self.mode.currentData() == 'precise':
+            self.statusBar().showMessage('精细删除：单击选字，双击选词段，拖动多选；预览后按 Delete 删除，Esc 取消。')
         elif self.mode.currentData() == 'erase':
             self.statusBar().showMessage('点选删除：红框标出将删除的文字段；点击删除，Ctrl+Z 撤销。')
         elif self.mode.currentData() == 'delete':
             self.statusBar().showMessage('框选删除：拖动框选文字，松开后删除；Ctrl+Z 撤销。')
+
+    def edit_at(self, point):
+        if self.busy or not self.path:
+            return
+        if self.draft:
+            self.statusBar().showMessage('请先应用或取消当前文字预览。', 5000)
+            return
+        target = next((o for o in reversed(self.objects) if
+            QRectF(o['bbox'][0], o['bbox'][1], o['bbox'][2] - o['bbox'][0],
+                   o['bbox'][3] - o['bbox'][1]).contains(point)), None)
+        if target is None:
+            self.statusBar().showMessage('此处没有可重新编辑的新增文字。仅支持本次打开后添加、且所在页未执行文字删除的对象。', 7000)
+            return
+        self.epoch += 1
+        self.set_busy(True)
+        self.client.command('begin_edit', epoch=self.epoch, index=self.index,
+                            revision=self.revision, object_id=target['id'])
+
+    def restore_object_draft(self, obj):
+        spec = obj['spec']
+        self.editing_id = obj['id']
+        fontfile = spec.get('fontfile')
+        label = next((name for name, path in self.fonts.items() if path == fontfile), None)
+        if label is None:
+            label = Path(fontfile).name if fontfile else '内置宋体'
+            self.fonts[label] = fontfile
+            if self.font_combo.findText(label) < 0:
+                self.font_combo.addItem(label)
+        self.font_combo.setCurrentText(label)
+        self.text_input.setPlainText(spec['text'])
+        self.size.setValue(spec['size'])
+        self.bold.setChecked(spec.get('bold', False))
+        self.color = tuple(spec['color'])
+        self.color_button.setStyleSheet('color: ' + QColor.fromRgbF(*self.color).name())
+        self.draft = Draft(self, spec['width'], spec['height'])
+        self.draft.offset = obj['offset']
+        self.draft.setPos(spec['x'], spec['y'])
+        self.view.scene().addItem(self.draft)
+        self.draft.changed.connect(self.draft_changed)
+        self.sync_geometry()
+        self.apply_button.setText('应用修改  Ctrl+Enter')
+        self.content_changed()
+        self.statusBar().showMessage('正在编辑新增文字。旧文字已从底图预览隐藏；应用后替换，Esc 恢复。')
 
     def spec(self):
         draft = self.draft
@@ -953,7 +1024,11 @@ class Editor(QMainWindow):
             item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
             self.guides.append(item)
 
-    def cancel(self):
+    def cancel(self, local=False):
+        if self.busy and not local:
+            return
+        editing_id = self.editing_id
+        self.editing_id = None
         self.view.clear_character_selection()
         if self.view.selection is not None:
             self.view.scene().removeItem(self.view.selection)
@@ -967,6 +1042,11 @@ class Editor(QMainWindow):
         self.draw_guides([])
         self.apply_button.setEnabled(False)
         self.preview_label.setText('点击页面放置文字；虚线是首行基线。')
+        self.apply_button.setText('应用文字  Ctrl+Enter')
+        if editing_id is not None and not local:
+            self.epoch += 1
+            self.set_busy(True)
+            self.client.command('cancel_edit', epoch=self.epoch, index=self.index)
 
     def apply(self):
         if self.busy or not self.draft or not self.draft.valid:
@@ -974,7 +1054,11 @@ class Editor(QMainWindow):
         spec = self.spec()
         self.epoch += 1
         self.set_busy(True)
-        self.client.command('insert', epoch=self.epoch, index=self.index, spec=spec)
+        if self.editing_id is not None:
+            self.client.command('update_object', epoch=self.epoch, index=self.index, spec=spec,
+                                object_id=self.editing_id, revision=self.revision)
+        else:
+            self.client.command('insert', epoch=self.epoch, index=self.index, spec=spec)
         self.statusBar().showMessage('正在后台写入文字…')
 
     def delete_selection(self, rect):

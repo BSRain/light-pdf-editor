@@ -42,3 +42,29 @@ def match_font(name, available):
         if label.lower().replace(' ', '') in name or any(alias in name for alias in aliases.get(label, ())):
             return label
     return None
+
+
+def word_at(x, y, characters):
+    """Whitespace/punctuation-delimited tokens; CJK runs are not semantic segmentation."""
+    import re
+    char = nearest_span(x, y, characters, 0)
+    if char is None:
+        return []
+    line = [c for c in characters if c.get('line') == char.get('line')]
+    text = ''.join(c['text'] for c in line)
+    offset = 0
+    target = None
+    for c in line:
+        if c['id'] == char['id']:
+            target = offset
+            break
+        offset += len(c['text'])
+    for match in re.finditer(r"\w+(?:['’]\w+)*|[^\w\s]", text):
+        if match.start() <= target < match.end():
+            selected, offset = [], 0
+            for c in line:
+                if match.start() <= offset < match.end():
+                    selected.append(c)
+                offset += len(c['text'])
+            return selected
+    return [char]
