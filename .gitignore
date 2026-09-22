@@ -17,3 +17,6 @@ zoom_benchmark.json
 qt_benchmark.json
 
 workflow_benchmark.json
+
+*.lpdf
+*.LPDF

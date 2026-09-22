@@ -1,4 +1,4 @@
-# Light PDF Editor v0.4.0 · Qt Edition · Personal Use
+# Light PDF Editor v0.4.1 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -13,7 +13,7 @@ A Windows desktop PDF text editor with a Chinese interface. This version replace
 1. Install Python 3.10 or newer on Windows with **Add Python to PATH** enabled.
 2. Clone or extract this repository and double-click **start.bat**.
 3. The launcher creates `.venv` and installs dependencies on first use. Existing installations automatically install Qt if missing.
-4. Close the old application before restarting. Drop one PDF into the editing view or choose **打开 PDF** (Open PDF).
+4. Close the old application before restarting. Drop one PDF into the editing view or choose **打开文件** (Open file).
 
 The initial Qt download is larger than the old version; subsequent use can be offline. Run normally, not as Administrator, to avoid Windows file-drop privilege restrictions. The repository contains no personal PDFs, virtual environments, or font files.
 
@@ -35,7 +35,7 @@ Changing font or size preserves the first baseline where page bounds permit. Bas
 3. The preview hides the old text while editing. **应用修改** / Ctrl+Enter replaces it; Esc restores the original state.
 4. An update is one undoable/redoable operation. Saving does not end the session, so editing can continue after export.
 
-**Scope:** only text inserted since opening this document is tracked. Reopening starts a new session; exported text remains ordinary PDF content. Text deletion keeps independent boxes away from the affected region editable. Intersecting boxes and their overlapping cluster become ordinary PDF text; undo restores editing. Clicking overlapping boxes opens a picker with text excerpts and coordinates; cancellation leaves the document unchanged.
+**Scope:** newly inserted and project-restored text boxes are tracked. Reopening a normal PDF starts a new session; .lpdf projects restore tracked boxes. Exported PDF text remains ordinary content. Text deletion keeps independent boxes away from the affected region editable. Intersecting boxes and their overlapping cluster become ordinary PDF text; undo restores editing. Clicking overlapping boxes opens a picker with text excerpts and coordinates; cancellation leaves the document unchanged.
 
 ![Re-editing an inserted text box](ui_reedit.png)
 
@@ -107,7 +107,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe benchmark_workflows.py --runs 5
 ```
 
-42 tests cover worker exit, interrupted edits, restart confirmation/cancellation, reopening the last export, independent boxes surviving redaction, Chinese font/pixel preservation, overlapping-box selection/cancel, reselect/move/update/cancel, preservation of overlapping original text, continued editing after export, encrypted object replacement, double-click token selection, precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
+55 tests cover worker exit, interrupted edits, restart confirmation/cancellation, reopening the last export, independent boxes surviving redaction, Chinese font/pixel preservation, overlapping-box selection/cancel, reselect/move/update/cancel, preservation of overlapping original text, continued editing after export, encrypted object replacement, double-click token selection, precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
 
 | File | Purpose |
 | --- | --- |
@@ -136,3 +136,11 @@ References: [Qt Graphics View](https://doc.qt.io/qtforpython-6.8/overviews/qtwid
 - Choose **表格单元格填字** and click inside a fully bordered vector cell to create a box with 4 pt padding. Move, resize and apply as usual. Scans, incomplete borders and slanted borders do not support automatic placement.
 - Line spacing survives session re-editing, undo and export. Imported font family names are matched; unavailable families such as narrow variants use an explicit fallback.
 - The underlying textbox height preflight is conservative and may ask for a larger box even when text could fit. Font size is never reduced automatically. Paragraph reflow and cell merging are outside this release.
+
+## Save an editable project (v0.4.1)
+
+Choose **保存工程** / Ctrl+Shift+S to save a new `.lpdf` file. It contains the current PDF snapshot and applied editable boxes, so moving or deleting the source PDF does not prevent reopening it. Use **打开文件** or drag the project into the view, then choose **编辑新增文字** to continue editing.
+
+Apply or cancel previews before saving. Undo history, unapplied drafts and original font files are not included; another computer may require selecting a local font. Projects from encrypted PDFs retain the original password protection without storing passwords in project metadata. Saving preserves the currently opened original; choose a new filename.
+
+**另存为** / Ctrl+S still exports a regular PDF and removes this application's project editing metadata. Use it for delivery. Autosave and crash-draft recovery are planned for v0.4.2; save projects manually in this release.

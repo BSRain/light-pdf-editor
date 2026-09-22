@@ -3,6 +3,17 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.4.1 — 2026-09-23
+
+- 新增 `.lpdf` 独立工程保存及打开、拖放。当前 PDF 快照和已应用文字框一起保存，重开恢复位置、字体设置、行距和编辑能力。
+  Save/open/drop standalone .lpdf projects containing a PDF snapshot and applied editable boxes, restoring position, font settings, spacing and editing.
+- 验证工程版本、页面内容 / 几何签名和文字流标识；损坏工程不会替换当前文档。保存采用同目录临时文件及原子替换。
+  Validate format versions, page content/geometry signatures and object streams; reject invalid projects without replacing the active document. Save through same-directory temporary files and atomic replacement.
+- 加密工程保留 PDF 密码保护；普通 PDF 导出移除工程编辑记录。工程不依赖原稿路径，不携带撤销历史、草稿或字体文件。
+  Retain PDF encryption; strip project editing metadata from regular exports. Projects are source-independent and omit undo history, drafts and font files.
+- 自动保存与崩溃草稿恢复拆分到 v0.4.2，先交付可验证的手动工程往返流程。
+  Autosave and crash-draft recovery move to v0.4.2; this release delivers the manually saved project roundtrip.
+
 ## v0.4.0 — 2026-09-23
 
 - 多栏吸附优先附近文本；取样估计同列相邻基线距离，新增可编辑行距，重新编辑和撤销保留设置。

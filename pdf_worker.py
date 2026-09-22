@@ -10,6 +10,7 @@ import sys
 import tempfile
 import pymupdf as fitz
 from process_metrics import process_memory
+from project_file import ATTACHMENT, write_manifest, read_manifest
 from pdf_core import add_text, delete_text, text_spans, baseline_offset, text_characters, delete_characters, ruling_lines
 
 
@@ -186,8 +187,14 @@ class Engine:
             if not candidate.page_count:
                 candidate.close()
                 raise ValueError('文件中没有页面。')
+            try:
+                project = read_manifest(candidate) if Path(request['path']).suffix.lower() == '.lpdf' else None
+            except Exception:
+                candidate.close()
+                raise
             self.end_edit()
-            self.objects = {}
+            self.objects = project['objects'] if project else {}
+            self.object_serial = project['serial'] if project else 0
             if self.doc:
                 self.doc.close()
             self.doc, self.path, self.password = candidate, Path(request['path']).resolve(), password
@@ -196,7 +203,7 @@ class Engine:
             self.future = []
             self.dirty = False
             self.display_key = None
-            return self.metadata(0)
+            return self.metadata(project['index'] if project else 0)
         if kind == 'preview':
             spec = dict(request['spec'])
             spec['x'], spec['y'] = 0, 0
@@ -288,17 +295,26 @@ class Engine:
                 self.limit_history()
                 self.revision += 1
             return self.metadata(index)
-        if kind == 'save':
+        if kind in ('save', 'save_project'):
             target = Path(request['path']).resolve()
             if target == self.path:
-                raise ValueError('请选择新的文件名，保留原始 PDF。')
+                raise ValueError('请选择新的文件名，保留当前打开的原始文件。')
+            if kind == 'save' and target.suffix.lower() == '.lpdf':
+                raise ValueError('普通 PDF 请使用 .pdf 扩展名；保存工程请使用“保存工程”。')
+            if kind == 'save_project' and target.suffix.lower() != '.lpdf':
+                raise ValueError('工程文件请使用 .lpdf 扩展名。')
             temp = None
             try:
                 fd, temp = tempfile.mkstemp(suffix='.pdf', dir=target.parent)
                 os.close(fd)
                 with self.copy_document() as export:
-                    # Remove unused objects and compact xrefs without quadratic duplicate-stream comparison.
-                    export.save(temp, garbage=2, deflate=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+                    if ATTACHMENT in export.embfile_names():
+                        export.embfile_del(ATTACHMENT)
+                    if kind == 'save_project':
+                        write_manifest(export, self.objects, self.object_serial, index)
+                    # Projects retain xref numbers used by editable-object references.
+                    export.save(temp, garbage=1 if kind == 'save_project' else 2,
+                                deflate=True, encryption=fitz.PDF_ENCRYPT_KEEP)
                 os.replace(temp, target)
                 self.dirty = False
                 self.history = [(data, True, i, objects) for data, _, i, objects in self.history]

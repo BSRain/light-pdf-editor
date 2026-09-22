@@ -355,6 +355,39 @@ class QtTests(unittest.TestCase):
         e.place_cell(QPointF(20, 20))
         self.assertIsNone(e.draft)
 
+    def test_project_save_reopen_edit_and_export(self):
+        e = self.editor
+        self.make_draft()
+        e.apply()
+        self.wait(lambda: not e.busy)
+        target = Path(self.temp.name) / 'session.lpdf'
+        with patch('pdf_editor.QFileDialog.getSaveFileName', return_value=(str(target), '')):
+            e.save_project()
+        self.wait(lambda: not e.busy)
+        self.assertTrue(target.exists())
+        self.assertFalse(e.dirty)
+        self.assertEqual(e.last_saved_path, target)
+        e.open_pdf(str(target))
+        self.wait(lambda: not e.busy and e.path == target)
+        self.assertEqual(len(e.objects), 1)
+        obj = e.objects[0]
+        e.mode.setCurrentIndex(e.mode.findData('edit'))
+        e.edit_at(QPointF(obj['bbox'][0] + 10, obj['bbox'][1] + 10))
+        self.wait(lambda: not e.busy and e.draft and e.draft.valid)
+        self.assertEqual(e.text_input.toPlainText(), 'Aligned text')
+        e.text_input.setPlainText('Reopened project')
+        self.wait(lambda: e.draft.valid)
+        e.apply()
+        self.wait(lambda: not e.busy)
+        self.assertTrue(any('Reopened' in s['text'] for s in e.spans))
+        output = Path(self.temp.name) / 'export.pdf'
+        with patch('pdf_editor.QFileDialog.getSaveFileName', return_value=(str(output), '')):
+            e.save()
+        self.wait(lambda: not e.busy)
+        with fitz.open(output) as doc:
+            self.assertEqual(doc.embfile_count(), 0)
+            self.assertIn('Reopened project', doc[0].get_text().replace('\xa0', ' '))
+
     def kill_worker(self):
         self.editor.client.process.kill()
         self.wait(lambda: self.editor.client.dead)

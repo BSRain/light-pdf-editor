@@ -473,7 +473,7 @@ class PdfView(QGraphicsView):
 
     def dropEvent(self, event):
         paths = [url.toLocalFile() for url in event.mimeData().urls()]
-        if len(paths) == 1 and Path(paths[0]).suffix.lower() == '.pdf':
+        if len(paths) == 1 and Path(paths[0]).suffix.lower() in ('.pdf', '.lpdf'):
             self.editor.open_pdf(paths[0])
             event.acceptProposedAction()
         else:
@@ -546,8 +546,9 @@ class Editor(QMainWindow):
         bar = QToolBar('文件与页面', self)
         bar.setMovable(False)
         self.addToolBar(bar)
-        self.open_action = self.action(bar, '打开 PDF', lambda: self.open_pdf(), 'Ctrl+O')
+        self.open_action = self.action(bar, '打开文件', lambda: self.open_pdf(), 'Ctrl+O')
         self.save_action = self.action(bar, '另存为', self.save, 'Ctrl+S')
+        self.project_action = self.action(bar, '保存工程', self.save_project, 'Ctrl+Shift+S')
         self.restart_action = self.action(bar, '重启处理进程', self.restart_worker)
         self.restart_action.setEnabled(False)
         self.undo_action = self.action(bar, '撤销', self.undo, 'Ctrl+Z')
@@ -675,7 +676,7 @@ class Editor(QMainWindow):
 
     def set_busy(self, value):
         self.busy = value
-        for control in (self.open_action, self.save_action, self.undo_action, self.redo_action, self.prev_action, self.next_action):
+        for control in (self.open_action, self.save_action, self.project_action, self.undo_action, self.redo_action, self.prev_action, self.next_action):
             control.setEnabled(not value)
         self.undo_action.setEnabled(not value and self.can_undo)
         self.redo_action.setEnabled(not value and self.can_redo)
@@ -700,7 +701,7 @@ class Editor(QMainWindow):
         if not self.discard():
             return
         if not path:
-            path, _ = QFileDialog.getOpenFileName(self, '打开 PDF', '', 'PDF (*.pdf)')
+            path, _ = QFileDialog.getOpenFileName(self, '打开 PDF 或编辑工程', '', 'PDF / 编辑工程 (*.pdf *.lpdf);;PDF (*.pdf);;编辑工程 (*.lpdf)')
         if not path:
             return
         if self.client.dead:
@@ -834,7 +835,7 @@ class Editor(QMainWindow):
                 self.cache_bytes -= removed
             if key in self.wanted:
                 self.show_tile(key, pixmap, data)
-        elif kind == 'save':
+        elif kind in ('save', 'save_project'):
             self.last_saved_path = Path(data['saved'])
             self.dirty = False
             self.set_busy(False)
@@ -951,7 +952,7 @@ class Editor(QMainWindow):
         if self.mode.currentData() == 'cell':
             self.statusBar().showMessage('表格填字：输入文字后点击有完整直线边框的单元格，自动留出 4 pt 内边距。扫描表格不支持。')
         elif self.mode.currentData() == 'edit':
-            self.statusBar().showMessage('点击本次打开后新增的文字，重新修改或移动；应用更新，Esc 取消。')
+            self.statusBar().showMessage('点击新增或工程中恢复的文字框，重新修改或移动；应用更新，Esc 取消。')
         elif self.mode.currentData() == 'precise':
             self.statusBar().showMessage('精细删除：单击选字，双击选词段，拖动多选；预览后按 Delete 删除，Esc 取消。')
         elif self.mode.currentData() == 'erase':
@@ -969,7 +970,7 @@ class Editor(QMainWindow):
             QRectF(o['bbox'][0], o['bbox'][1], o['bbox'][2] - o['bbox'][0],
                    o['bbox'][3] - o['bbox'][1]).contains(point)]
         if not candidates:
-            self.statusBar().showMessage('此处没有可重新编辑的新增文字。仅支持本次打开后添加、且未受文字删除影响的文字框。', 7000)
+            self.statusBar().showMessage('此处没有可重新编辑的新增文字。仅支持新增或工程恢复、且未受文字删除影响的文字框。', 7000)
             return
         target = candidates[0]
         if len(candidates) > 1:
@@ -1235,6 +1236,21 @@ class Editor(QMainWindow):
         self.epoch += 1
         self.set_busy(True)
         self.client.command('page', epoch=self.epoch, index=self.index + delta)
+
+    def save_project(self):
+        if self.busy or not self.path:
+            return
+        if self.draft:
+            self.statusBar().showMessage('请先应用或取消文字预览，再保存工程。', 5000)
+            return
+        target, _ = QFileDialog.getSaveFileName(self, '保存编辑工程',
+            str(self.path.with_name(self.path.stem + '_工程.lpdf')), '编辑工程 (*.lpdf)')
+        if not target:
+            return
+        self.epoch += 1
+        self.set_busy(True)
+        self.client.command('save_project', path=target, index=self.index, epoch=self.epoch)
+        self.statusBar().showMessage('正在保存文档快照及可编辑文字框…')
 
     def save(self):
         if self.busy or not self.path:
