@@ -1,4 +1,4 @@
-# 轻简 PDF v0.4.2 · Qt 版 · 自用
+# 轻简 PDF v0.5.0-rc.1 · Qt 版 · 自用
 
 [English](README.en.md) | 简体中文 | [版本计划](ROADMAP.md) | [更新日志](CHANGELOG.md)
 
@@ -7,6 +7,10 @@
 ![Qt 编辑器与原文基线吸附](ui_preview.png)
 
 Windows 中文桌面工具，支持添加和删除 PDF 文字。此版本已从 Tkinter 重构为 **PySide6 / Qt + 独立 PDF 处理进程**。文件在本机处理，不上传服务器。
+
+## Windows 便携候选版
+
+可在 [GitHub Releases](https://github.com/BSRain/light-pdf-editor/releases) 下载 Windows x64 ZIP，完整解压后运行 `LightPDFEditor.exe`。保留同目录下的 `PdfWorker.exe` 和 `_internal`。构建、校验和验证范围见 [便携版说明](BUILD_WINDOWS.md)。候选版尚未完成全新无 Python 系统及物理多显示器验证。
 
 ## 启动
 

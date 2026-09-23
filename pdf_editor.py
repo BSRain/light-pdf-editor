@@ -34,8 +34,12 @@ class PdfClient(QObject):
         self.dead = False
         self.stderr = ''
         self.process = QProcess(self)
-        self.process.setProgram(sys.executable)
-        self.process.setArguments(['-u', str(Path(__file__).with_name('pdf_worker.py'))])
+        if getattr(sys, 'frozen', False):
+            self.process.setProgram(str(Path(sys.executable).with_name('PdfWorker.exe')))
+            self.process.setArguments([])
+        else:
+            self.process.setProgram(sys.executable)
+            self.process.setArguments(['-u', str(Path(__file__).with_name('worker_entry.py'))])
         self.process.readyReadStandardOutput.connect(self.read)
         self.process.readyReadStandardError.connect(self.read_error)
         self.process.started.connect(self.dispatch)
@@ -488,7 +492,8 @@ class Editor(QMainWindow):
         self.setWindowTitle(f'轻简 PDF {__version__} · Qt 版 · 自用')
         available = QApplication.primaryScreen().availableGeometry()
         self.resize(min(1280, available.width() - 60), min(860, available.height() - 60))
-        self.setMinimumSize(900, 640)
+        self.setMinimumSize(min(900, max(480, available.width() - 60)),
+                            min(640, max(360, available.height() - 60)))
         self.path = None
         self.last_saved_path = None
         self.index = 0
@@ -1277,7 +1282,7 @@ class Editor(QMainWindow):
         self.recovery_toggle.blockSignals(True)
         self.recovery_toggle.setChecked(False)
         self.recovery_toggle.blockSignals(False)
-        self.recovery_label.setText('自动恢复已关闭；已有副本保留在所选目录。')
+        self.recovery_label.setText('自动恢复已关闭；已有副本保留在所选目录。' if self.recovery_path else '尚未启用自动恢复副本。')
 
     def toggle_recovery(self, enabled):
         if not enabled:
@@ -1413,6 +1418,9 @@ def main():
     app.setFont(QFont('Microsoft YaHei UI', 10))
     editor = Editor()
     editor.show()
+    if len(sys.argv) == 3 and sys.argv[1] == '--smoke-test':
+        from portable_smoke import run
+        return run(editor, sys.argv[2])
     if len(sys.argv) > 1:
         QTimer.singleShot(0, lambda: editor.open_pdf(sys.argv[1]))
     return app.exec()

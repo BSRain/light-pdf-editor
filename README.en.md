@@ -1,4 +1,4 @@
-# Light PDF Editor v0.4.2 · Qt Edition · Personal Use
+# Light PDF Editor v0.5.0-rc.1 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -7,6 +7,10 @@ English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGE
 ![Qt editor with baseline snapping](ui_preview.png)
 
 A Windows desktop PDF text editor with a Chinese interface. This version replaces the Tkinter implementation with **PySide6 / Qt and a separate PDF worker process**. Files are processed locally.
+
+## Portable Windows release candidate
+
+Download the Windows x64 ZIP from [GitHub Releases](https://github.com/BSRain/light-pdf-editor/releases), extract everything and run `LightPDFEditor.exe`. Keep `PdfWorker.exe` and `_internal` beside it. See [build and validation notes](BUILD_WINDOWS.md). Clean Windows without Python and physical multi-monitor validation remain pending.
 
 ## Start
 

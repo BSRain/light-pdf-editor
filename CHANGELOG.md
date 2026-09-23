@@ -3,6 +3,15 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.5.0-rc.1 — 2026-09-23
+
+- 新增 Windows x64 便携构建、GUI / PDF 工作进程分离的无控制台 EXE、Windows 文件版本信息和 SHA-256 校验文件。
+  Add Windows x64 portable builds, separate windowless GUI/PDF worker executables, Windows version resources and SHA-256 checksums.
+- 打包附带对应源码、使用说明和依赖许可证；工作进程适配打包目录与继承管道，不依赖系统 Python 命令。
+  Bundle matching source, documentation and dependency licenses; adapt worker discovery and inherited pipes without relying on a system Python command.
+- 本机移位、中文空格路径、删除、填字、工程往返和加密导出自检；全新无 Python 系统和物理多显示器验证尚未完成，作为候选版发布。
+  Local relocated Unicode/space-path checks exercise deletion, insertion, project roundtrips and encrypted export. Clean Windows without Python and physical multi-monitor tests remain pending; this is a release candidate.
+
 ## v0.4.2 — 2026-09-23
 
 - 可选自动恢复副本：选择目录后首次保存，约每 30 秒检查，跳过未变化内容，后台保存不丢弃预览与渲染请求。
