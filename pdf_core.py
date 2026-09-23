@@ -40,7 +40,6 @@ def add_text(page, x, y, text, size, color, fontfile=None, width=None, height=No
     box_height = page_height - y - 6 if height is None else height
     if box_width <= 0 or box_height <= 0 or x + box_width > page_width + 0.001 or y + box_height > page_height + 0.001:
         raise ValueError('文字框超出页面，请移动位置或减小文字框尺寸。')
-    rect = fitz.Rect(x, y, min(x + box_width, page_width), min(y + box_height, page_height)) * page.derotation_matrix
     synthetic_bold = False
     if bold:
         variant = bold_font_path(fontfile)
@@ -55,18 +54,27 @@ def add_text(page, x, y, text, size, color, fontfile=None, width=None, height=No
         if missing:
             raise ValueError('当前字体不支持这些字符：' + ''.join(sorted(missing))[:16] + '。请选择其他字体。')
         fontname = 'PE' + hashlib.sha256(str(fontfile).encode()).hexdigest()[:16]
+    metrics = load_font(fontfile) if fontfile else fitz.Font('china-s')
+    widest = max((metrics.text_length(c, fontsize=size) if fontfile else size
+                  for c in set(text) if not c.isspace()), default=0)
+    if widest > box_width + .001:
+        raise ValueError('文字框宽度小于单个字符，请加宽文字框或减小字号。')
+    default_factor = 1.2 if metrics.ascender - metrics.descender <= 1 else metrics.ascender - metrics.descender
+    factor = line_spacing / baseline_offset(fontfile, size) if line_spacing is not None else default_factor
+    # Let MuPDF wrap words with ample vertical space, then test the actual last
+    # baseline and descent. Its own fit estimate reserves a full extra line step.
+    layout_height = min(100000000, max(box_height, (len(text) + 1) * size * factor + abs(metrics.descender * size)) * 2)
+    layout_rect = fitz.Rect(x, y, x + box_width, y + layout_height) * page.derotation_matrix
     shape = page.new_shape()
-    remaining = shape.insert_textbox(rect, text, fontsize=size, fontname=fontname, fontfile=fontfile,
+    remaining = shape.insert_textbox(layout_rect, text, fontsize=size, fontname=fontname, fontfile=fontfile,
                                    color=color, fill=color, rotate=page.rotation,
-                                   lineheight=line_spacing / baseline_offset(fontfile, size) if line_spacing is not None else None,
+                                   lineheight=factor,
                                    render_mode=2 if synthetic_bold else 0,
-                                   border_width=size * 0.025 if synthetic_bold else 0.05)
-    if line_spacing is not None and remaining >= 0:
-        # PyMuPDF 1.26.7 advances by ascender * size * lineheight. Its fit
-        # estimate omits that factor; also check actual baseline geometry.
-        metrics = load_font(fontfile) if fontfile else fitz.Font('china-s')
+                                   border_width=0.025 if synthetic_bold else 0.05)
+    if remaining >= 0:
         count = shape.text_cont.count('TJ\n')
-        actual_height = size * (metrics.ascender - metrics.descender) + max(0, count - 1) * line_spacing
+        pitch = metrics.ascender * size * factor
+        actual_height = size * (metrics.ascender - metrics.descender) + max(0, count - 1) * pitch
         if actual_height > box_height + 0.001:
             remaining = -1
     if remaining < 0:

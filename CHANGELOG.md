@@ -3,6 +3,17 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.5.0-rc.2 — 2026-09-23
+
+- 复用 PDF 引擎的换行结果，按实际首 / 末行基线与字体下降部判断文字高度；修正大行距下单行文字误报溢出。字符宽度超过框宽时拒绝写入。
+  Reuse PDF word wrapping and check actual first/last baselines plus font descent. Fix false single-line overflow with large spacing; reject boxes narrower than a glyph advance.
+- 修正模拟加粗笔画宽度重复乘字号，防止宋体等字体粗成实心；已有原生粗体继续使用粗体字体文件。
+  Remove duplicate font-size scaling in synthetic bold strokes, preventing over-thick SimSun and similar fonts; native bold variants remain preferred.
+- 64 项回归，新增四种旋转下紧凑单行框的实际渲染检查、精确高度与水平溢出保护、三种字号的加粗像素覆盖率检查。
+  64 regressions add rendered tight-box checks across four rotations, exact-height/horizontal-overflow protection and synthetic-bold ink coverage at three sizes.
+- 固定便携构建使用的 Pillow 和打包工具依赖版本，使首次构建包含完整依赖与许可证。
+  Pin Pillow and packaging dependencies for complete first-time builds and license collection.
+
 ## v0.5.0-rc.1 — 2026-09-23
 
 - 新增 Windows x64 便携构建、GUI / PDF 工作进程分离的无控制台 EXE、Windows 文件版本信息和 SHA-256 校验文件。

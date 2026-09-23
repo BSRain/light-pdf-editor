@@ -99,6 +99,62 @@ class LayoutTests(unittest.TestCase):
                         add_text(p, 40, 200, text, 14, (0, 0, 0), fonts[name], 200, 15, bold, 2)
                     self.assertEqual(p.get_text(), before)
 
+    def test_single_line_ignores_unused_line_step_in_tight_rotated_box(self):
+        fonts = windows_fonts()
+        for rotation in (0, 90, 180, 270):
+            for family in ('Arial', '微软雅黑', '宋体'):
+                with self.subTest(rotation=rotation, family=family), fitz.open() as doc:
+                    p = doc.new_page(width=600, height=800)
+                    p.set_rotation(rotation)
+                    text = 'Fits one line' if family == 'Arial' else '单行文字'
+                    add_text(p, 40, 50, text, 14, (0,0,0), fonts[family], 200, 20, line_spacing=80)
+                    spans = text_spans(p)
+                    self.assertEqual(len(spans), 1)
+                    # Some MuPDF font/rotation combinations report shifted text
+                    # boxes; check the rendered ink rather than those estimates.
+                    pix = p.get_pixmap(matrix=fitz.Matrix(2, 2), colorspace=fitz.csGRAY,
+                                       clip=fitz.Rect(38, 45, 242, 80))
+                    rows = [row for row in range(pix.height)
+                            if min(pix.samples[row * pix.stride:row * pix.stride + pix.width]) < 180]
+                    self.assertTrue(rows)
+                    self.assertGreaterEqual((pix.y + min(rows)) / 2, 49.5)
+                    self.assertLessEqual((pix.y + max(rows)) / 2, 70.5)
+
+    def test_wrapped_text_uses_actual_height_and_rejects_narrow_glyph(self):
+        from pdf_core import load_font
+        font = windows_fonts()['Arial']
+        metrics = load_font(font)
+        height = 14 * (metrics.ascender - metrics.descender) + 26
+        with fitz.open() as doc:
+            p = doc.new_page()
+            add_text(p, 40, 50, 'First\nSecond', 14, (0,0,0), font, 120, height, line_spacing=26)
+            spans = text_spans(p)
+            self.assertEqual(len(spans), 2)
+            self.assertAlmostEqual(spans[1]['baseline']-spans[0]['baseline'], 26, delta=.02)
+            before = p.get_text()
+            with self.assertRaises(ValueError):
+                add_text(p, 40, 150, 'First\nSecond', 14, (0,0,0), font, 120, height-1, line_spacing=26)
+            with self.assertRaisesRegex(ValueError, '单个字符'):
+                add_text(p, 40, 250, 'W', 14, (0,0,0), font, 3, 100, line_spacing=26)
+            self.assertEqual(p.get_text(), before)
+            add_text(p, 40, 350, 'Alpha beta gamma delta epsilon', 14, (0,0,0), font, 90, 200, line_spacing=26)
+            wrapped = [s for s in text_spans(p) if s['bbox'][1] > 300]
+            self.assertGreater(len(wrapped), 1)
+            self.assertLessEqual(max(s['bbox'][2] for s in wrapped), 130.02)
+
+    def test_synthetic_bold_has_proportional_ink_not_solid_glyphs(self):
+        font = windows_fonts()['宋体']
+        for size in (14, 28, 42):
+            with self.subTest(size=size), fitz.open() as doc:
+                ink = []
+                for bold in (False, True):
+                    p = doc.new_page(width=400, height=140)
+                    add_text(p, 30, 30, '宋体加粗测试', size, (0,0,0), font, 350, 100, bold=bold)
+                    pix = p.get_pixmap(matrix=fitz.Matrix(2,2), alpha=False)
+                    ink.append(sum(v < 180 for v in pix.samples[::pix.n]))
+                self.assertGreater(ink[1], ink[0])
+                self.assertLess(ink[1], ink[0] * 2.5)
+
     def test_invalid_line_pitch_rejected_without_change(self):
         with fitz.open() as doc:
             p = doc.new_page()

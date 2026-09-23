@@ -1,4 +1,4 @@
-# Light PDF Editor v0.5.0-rc.1 · Qt Edition · Personal Use
+# Light PDF Editor v0.5.0-rc.2 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -111,7 +111,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe benchmark_workflows.py --runs 5
 ```
 
-61 tests cover worker exit, interrupted edits, restart confirmation/cancellation, reopening the last export, independent boxes surviving redaction, Chinese font/pixel preservation, overlapping-box selection/cancel, reselect/move/update/cancel, preservation of overlapping original text, continued editing after export, encrypted object replacement, double-click token selection, precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
+64 tests cover worker exit, interrupted edits, restart confirmation/cancellation, reopening the last export, independent boxes surviving redaction, Chinese font/pixel preservation, overlapping-box selection/cancel, reselect/move/update/cancel, preservation of overlapping original text, continued editing after export, encrypted object replacement, double-click token selection, precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
 
 | File | Purpose |
 | --- | --- |
@@ -139,7 +139,7 @@ References: [Qt Graphics View](https://doc.qt.io/qtforpython-6.8/overviews/qtwid
 - **行距** specifies the distance between adjacent baselines in PDF points; 0 selects automatic spacing. Style sampling estimates spacing from nearby same-column lines with similar font sizes; review the estimate in the preview.
 - Choose **表格单元格填字** and click inside a fully bordered vector cell to create a box with 4 pt padding. Move, resize and apply as usual. Scans, incomplete borders and slanted borders do not support automatic placement.
 - Line spacing survives session re-editing, undo and export. Imported font family names are matched; unavailable families such as narrow variants use an explicit fallback.
-- The underlying textbox height preflight is conservative and may ask for a larger box even when text could fit. Font size is never reduced automatically. Paragraph reflow and cell merging are outside this release.
+- Textbox fitting uses actual line count, baseline pitch and font height; a large line pitch no longer falsely rejects a single line. Font size is never reduced automatically. Paragraph reflow and cell merging are outside this release.
 
 ## Save an editable project (v0.4.1)
 
@@ -157,3 +157,9 @@ Apply or cancel previews before saving. Undo history, unapplied drafts and origi
 4. After a crash, choose **打开恢复副本**, open the saved file, review it, apply/cancel its draft and export a PDF or project. Encrypted snapshots require the original password; passwords are not stored in snapshot metadata.
 
 Only the last successful snapshot is recoverable; later changes may be lost. Input text not yet placed on the page is omitted. Save failures pause automatic recovery with an explanation in the panel, without blocking editing or manual saves. Disabling recovery or closing the app retains existing snapshots; manage the directory and disk space yourself. Recovery snapshots require v0.4.2 or newer.
+
+## v0.5.0-rc.2 layout fixes
+
+- Large baseline spacing no longer falsely rejects a single line; compact cells use the actual font height.
+- Boxes narrower than one character are rejected with an explicit widening hint, preventing horizontal overflow.
+- Synthetic bold for fonts without a dedicated bold file, such as SimSun, uses stroke width proportional to font size. The previous extra multiplication by font size is removed.
