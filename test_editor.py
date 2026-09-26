@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 import pymupdf as fitz
 from PySide6.QtCore import QPoint, QPointF, Qt, QMimeData, QUrl
-from PySide6.QtGui import QDragEnterEvent, QDropEvent
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QWheelEvent
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtTest import QTest
 from pdf_core import add_text, delete_text, windows_fonts, text_spans, text_characters
@@ -321,6 +321,73 @@ class QtTests(unittest.TestCase):
         e.place(QPointF(300, span['baseline'] + 2))
         self.wait(lambda: e.draft is not None and e.draft.valid)
         return span
+
+    def test_property_wheel_requires_keyboard_focus(self):
+        e = self.editor
+        for control, value in ((e.size, e.size.value), (e.font_combo, e.font_combo.currentIndex),
+                               (e.text_align, e.text_align.currentIndex), (e.coords['x'], e.coords['x'].value),
+                               (e.mode, e.mode.currentIndex)):
+            with self.subTest(control=control):
+                e.activateWindow()
+                e.text_input.setFocus()
+                QApplication.processEvents()
+                before = value()
+                def wheel():
+                    point = control.rect().center()
+                    event = QWheelEvent(QPointF(point), QPointF(control.mapToGlobal(point)), QPoint(),
+                                        QPoint(0, -120), Qt.MouseButton.NoButton,
+                                        Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase, False)
+                    QApplication.sendEvent(control, event)
+                    return event
+                event = wheel()
+                self.assertEqual(value(), before)
+                self.assertFalse(event.isAccepted())
+                control.setFocus()
+                QApplication.processEvents()
+                self.assertTrue(control.hasFocus())
+                wheel()
+                self.assertNotEqual(value(), before)
+
+    def test_small_window_keeps_apply_cancel_visible(self):
+        e = self.editor
+        e.setMinimumSize(600, 400)
+        e.resize(900, 480)
+        self.make_draft()
+        bar = e.properties_scroll.verticalScrollBar()
+        self.assertGreater(bar.maximum(), 0)
+        for position in (0, bar.maximum()):
+            bar.setValue(position)
+            QApplication.processEvents()
+            for button in (e.apply_button, e.cancel_button):
+                self.assertEqual(button.visibleRegion().boundingRect(), button.rect())
+                self.assertTrue(e.rect().contains(button.mapTo(e, button.rect().bottomRight())))
+        QTest.mouseClick(e.apply_button, Qt.MouseButton.LeftButton)
+        self.wait(lambda: not e.busy and e.draft is None)
+        self.assertIn('Aligned text', ''.join(s['text'] for s in e.spans).replace('\xa0', ' '))
+
+    def test_builtin_chinese_font_with_only_latin_system_fonts(self):
+        with patch('pdf_editor.windows_fonts', return_value={'Arial': windows_fonts().get('Arial')}):
+            other = Editor()
+        try:
+            self.assertEqual(other.font_combo.currentText(), '内置中文字体')
+            self.assertIsNone(other.fonts[other.font_combo.currentText()])
+        finally:
+            other.client.close()
+            other.close()
+        e = self.editor
+        self.assertGreaterEqual(e.font_combo.findText('内置中文字体'), 0)
+        e.font_combo.setCurrentText('内置中文字体')
+        e.text_input.setPlainText('内置中文测试')
+        e.place(QPointF(60, 420))
+        self.wait(lambda: e.draft is not None and e.draft.valid)
+        e.apply()
+        self.wait(lambda: not e.busy and e.draft is None)
+        self.assertIn('内置中文测试', ''.join(s['text'] for s in e.spans))
+        obj = e.objects[-1]
+        e.edit_at(QPointF(obj['bbox'][0] + 3, obj['bbox'][1] + 3))
+        self.wait(lambda: not e.busy and e.draft is not None and e.draft.valid)
+        self.assertEqual(e.font_combo.currentText(), '内置中文字体')
+        self.assertIsNone(e.spec()['fontfile'])
 
     def test_cell_click_line_pitch_and_reedit(self):
         e = self.editor

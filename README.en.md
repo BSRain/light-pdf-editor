@@ -1,4 +1,4 @@
-# Light PDF Editor v0.5.0-rc.3 · Qt Edition · Personal Use
+# Light PDF Editor v0.5.0-rc.4 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -31,6 +31,8 @@ The initial Qt download is larger than the old version; subsequent use can be of
 6. Review the PDF engine's text preview, then click **应用文字** (Apply) or press **Ctrl+Enter**. Press **Esc** to cancel the draft.
 
 Changing font or size preserves the first baseline where page bounds permit. Baseline snapping currently supports extractable text that is horizontal on screen. Scans, outlined glyphs, and vertical text do not provide supported baseline targets.
+
+In small windows, Apply and Cancel remain fixed below the scrollable properties. Font, size and position controls respond to the wheel only after receiving keyboard focus. **内置中文字体** (built-in Chinese font) is always available and becomes the default when no supported Chinese system font is installed.
 
 ## Re-edit inserted text
 
@@ -164,8 +166,8 @@ Only the last successful snapshot is recoverable; later changes may be lost. Inp
 - Boxes narrower than one character are rejected with an explicit widening hint, preventing horizontal overflow.
 - Synthetic bold for fonts without a dedicated bold file, such as SimSun, uses stroke width proportional to font size. The previous extra multiplication by font size is removed.
 
-## v0.5.0-rc.3 box alignment and rotated selection
+## v0.5.0-rc.4 box alignment and rotated selection
 
 **框内对齐** supports left, center and right alignment within each text box; centering works directly with table-cell placement. X always denotes the box's left edge, and clicks/drags position the box. Style sampling resets to left alignment instead of guessing the source paragraph's alignment.
 
-Alignment survives preview, re-editing, projects and recovery. Files containing the new alignment setting require v0.5.0-rc.3 or newer; older projects remain readable. Precise font metrics fix selection boxes displaced from SimSun and similar text on 180-degree pages.
+Alignment survives preview, re-editing, projects and recovery. Files containing the new alignment setting require v0.5.0-rc.4 or newer; older projects remain readable. Precise font metrics fix selection boxes displaced from SimSun and similar text on 180-degree pages.

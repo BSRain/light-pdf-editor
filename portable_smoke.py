@@ -42,7 +42,10 @@ def run(editor, output):
                                 device_pixel_ratio=editor.devicePixelRatioF())
         if editor.width() > available.width() or editor.height() > available.height():
             raise AssertionError('Window exceeds available screen geometry')
-        report['checks'].append('open and render')
+        for button in (editor.apply_button, editor.cancel_button):
+            if button.visibleRegion().boundingRect() != button.rect():
+                raise AssertionError('Apply/cancel controls are clipped')
+        report['checks'].append('open, render and visible apply/cancel controls')
         editor.view.select_characters(QRectF(38, 45, 160, 20), QPointF())
         editor.delete_characters()
         wait(lambda: not editor.busy)
@@ -54,7 +57,7 @@ def run(editor, output):
         editor.size.setValue(14)
         editor.line_spacing.setValue(26)
         editor.text_align.setCurrentIndex(editor.text_align.findData(1))
-        editor.font_combo.setCurrentText('微软雅黑' if '微软雅黑' in windows_fonts() else '内置宋体')
+        editor.font_combo.setCurrentText('内置中文字体')
         editor.place_cell(QPointF(100, 160))
         wait(lambda: editor.draft and editor.draft.valid)
         editor.apply()

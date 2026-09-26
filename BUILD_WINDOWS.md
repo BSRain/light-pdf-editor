@@ -1,6 +1,6 @@
 # Windows 便携版构建 / Portable Windows builds
 
-当前候选版：v0.5.0-rc.3。自用 / Personal use。
+当前候选版：v0.5.0-rc.4。自用 / Personal use。
 
 ## 使用 / Run
 
@@ -21,7 +21,7 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements-build.txt
 .venv\Scripts\python.exe -m unittest discover -q
 .venv\Scripts\python.exe build_windows.py
-.venv\Scripts\python.exe verify_portable.py releases\LightPDFEditor-0.5.0-rc.3-windows-x64.zip
+.venv\Scripts\python.exe verify_portable.py releases\LightPDFEditor-0.5.0-rc.4-windows-x64.zip
 ```
 
 构建脚本验证输出目录位于仓库内，再调用 PyInstaller；只替换 `dist/LightPDFEditor` 构建产物。ZIP 与 SHA-256 文件位于 `releases/`，不会加入 Git 源代码历史。版本代码使用 Git 标签管理，ZIP 作为对应 GitHub Release 附件。

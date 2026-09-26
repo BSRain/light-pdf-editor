@@ -18,6 +18,27 @@ from alignment import snap_box, nearest_span, match_font, word_at, sample_line_s
 from version import __version__
 
 
+class FocusWheelMixin:
+    """Scrolling past a property must not silently change the document style."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def wheelEvent(self, event):
+        if self.hasFocus():
+            super().wheelEvent(event)
+        else:
+            event.ignore()
+
+
+class PropertyComboBox(FocusWheelMixin, QComboBox):
+    pass
+
+
+class PropertySpinBox(FocusWheelMixin, QDoubleSpinBox):
+    pass
+
+
 class PdfClient(QObject):
     result = Signal(dict)
     failed = Signal(str)
@@ -514,6 +535,10 @@ class Editor(QMainWindow):
         self.guides = []
         self.color = (0.0, 0.0, 0.0)
         self.fonts = windows_fonts()
+        if not any(name in self.fonts for name in ('微软雅黑', '宋体', '黑体', '楷体', '仿宋')):
+            self.fonts = {'内置中文字体': None, **self.fonts}
+        else:
+            self.fonts['内置中文字体'] = None
         self.preview_version = 0
         self.tile_cache = OrderedDict()
         self.cache_bytes = 0
@@ -586,7 +611,7 @@ class Editor(QMainWindow):
         editing.setMovable(False)
         self.addToolBar(editing)
         editing.addWidget(QLabel('工具  '))
-        self.mode = QComboBox()
+        self.mode = PropertyComboBox()
         for label, value in [('添加文字', 'add'), ('表格单元格填字', 'cell'), ('编辑新增文字', 'edit'), ('精细删除（按字符）', 'precise'), ('框选删除', 'delete'), ('点选删除文字', 'erase'), ('取样原文样式', 'sample'), ('平移页面', 'pan')]:
             self.mode.addItem(label, value)
         self.mode.currentIndexChanged.connect(self.mode_changed)
@@ -616,20 +641,20 @@ class Editor(QMainWindow):
         self.text_input.textChanged.connect(self.content_changed)
         layout.addWidget(self.text_input)
         form = QFormLayout()
-        self.font_combo = QComboBox()
-        self.font_combo.addItems(list(self.fonts) or ['内置宋体'])
+        self.font_combo = PropertyComboBox()
+        self.font_combo.addItems(list(self.fonts))
         self.font_combo.currentTextChanged.connect(self.content_changed)
         form.addRow('字体', self.font_combo)
         import_button = QPushButton('选择字体文件…')
         import_button.clicked.connect(self.import_font)
         form.addRow('', import_button)
-        self.size = QDoubleSpinBox()
+        self.size = PropertySpinBox()
         self.size.setRange(6, 96)
         self.size.setValue(14)
         self.size.setSuffix(' pt')
         self.size.valueChanged.connect(self.content_changed)
         form.addRow('字号', self.size)
-        self.line_spacing = QDoubleSpinBox()
+        self.line_spacing = PropertySpinBox()
         self.line_spacing.setRange(0, 1000)
         self.line_spacing.setDecimals(2)
         self.line_spacing.setSuffix(' pt')
@@ -637,7 +662,7 @@ class Editor(QMainWindow):
         self.line_spacing.setToolTip('相邻行基线之间的距离；0 为字体默认行距。取样时尝试读取同列相邻行。')
         self.line_spacing.valueChanged.connect(self.content_changed)
         form.addRow('行距', self.line_spacing)
-        self.text_align = QComboBox()
+        self.text_align = PropertyComboBox()
         for label, value in [('左对齐', 0), ('居中', 1), ('右对齐', 2)]:
             self.text_align.addItem(label, value)
         self.text_align.currentIndexChanged.connect(self.content_changed)
@@ -651,7 +676,7 @@ class Editor(QMainWindow):
         form.addRow('颜色', self.color_button)
         self.coords = {}
         for key, label, value in [('x', '文字框左侧 X', 40), ('baseline', '首行基线 Y', 60), ('width', '文字框宽', 260), ('height', '文字框高', 90)]:
-            field = QDoubleSpinBox()
+            field = PropertySpinBox()
             field.setRange(0 if key in ('x', 'baseline') else 12, 20000)
             field.setDecimals(2)
             field.setValue(value)
@@ -664,16 +689,6 @@ class Editor(QMainWindow):
         self.sample_label.setWordWrap(True)
         layout.addWidget(self.sample_label)
         layout.addStretch()
-        self.preview_label = QLabel('点击页面放置文字；对齐时出现蓝色参考线。')
-        self.preview_label.setWordWrap(True)
-        layout.addWidget(self.preview_label)
-        self.apply_button = QPushButton('应用文字  Ctrl+Enter')
-        self.apply_button.setEnabled(False)
-        self.apply_button.clicked.connect(self.apply)
-        layout.addWidget(self.apply_button)
-        cancel = QPushButton('取消预览  Esc')
-        cancel.clicked.connect(self.cancel)
-        layout.addWidget(cancel)
         self.recovery_toggle = QCheckBox('自动恢复副本（约 30 秒）')
         self.recovery_toggle.setToolTip('选择本地目录，保存当前文档和已放置的草稿；保留原有 PDF 加密。每次打开文件后需重新启用。')
         self.recovery_toggle.toggled.connect(self.toggle_recovery)
@@ -687,7 +702,26 @@ class Editor(QMainWindow):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(body)
-        dock.setWidget(scroll)
+        self.properties_scroll = scroll
+        panel = QWidget()
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+        panel_layout.addWidget(scroll, 1)
+        footer_widget = QWidget()
+        footer_layout = QVBoxLayout(footer_widget)
+        self.preview_label = QLabel('点击页面放置文字；对齐时出现蓝色参考线。')
+        self.preview_label.setWordWrap(True)
+        self.preview_label.setMaximumHeight(64)
+        footer_layout.addWidget(self.preview_label)
+        self.apply_button = QPushButton('应用文字  Ctrl+Enter')
+        self.apply_button.setEnabled(False)
+        self.apply_button.clicked.connect(self.apply)
+        footer_layout.addWidget(self.apply_button)
+        self.cancel_button = QPushButton('取消预览  Esc')
+        self.cancel_button.clicked.connect(self.cancel)
+        footer_layout.addWidget(self.cancel_button)
+        panel_layout.addWidget(footer_widget)
+        dock.setWidget(panel)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
         apply_action = QAction(self)
         apply_action.setShortcut('Ctrl+Return')
@@ -824,6 +858,7 @@ class Editor(QMainWindow):
                     self.draft.update()
                     self.apply_button.setEnabled(False)
                     self.preview_label.setText(response['error'])
+                    self.preview_label.setToolTip(response['error'])
             elif kind == 'tile':
                 self.statusBar().showMessage('该区域渲染失败：' + response['error'], 6000)
             else:
@@ -865,6 +900,7 @@ class Editor(QMainWindow):
                 self.sync_geometry()
                 self.apply_button.setEnabled(not self.busy)
                 self.preview_label.setText('实际 PDF 排版预览。蓝色虚线是首行基线。')
+                self.preview_label.setToolTip('')
         elif kind == 'tile' and not data.get('stale'):
             key = tuple(request['key'])
             pixmap = decode_pixmap(data['image'])
@@ -1035,7 +1071,7 @@ class Editor(QMainWindow):
         fontfile = spec.get('fontfile')
         label = next((name for name, path in self.fonts.items() if path == fontfile), None)
         if label is None:
-            label = Path(fontfile).name if fontfile else '内置宋体'
+            label = Path(fontfile).name if fontfile else '内置中文字体'
             self.fonts[label] = fontfile
             if self.font_combo.findText(label) < 0:
                 self.font_combo.addItem(label)

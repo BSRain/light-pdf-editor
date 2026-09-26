@@ -3,6 +3,17 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.5.0-rc.4 — 2026-09-26
+
+- 应用 / 取消按钮固定在属性面板底部，小窗口与高 DPI 下无需滚到底部才能操作。
+  Keep Apply/Cancel below the scrollable properties in small/high-DPI windows.
+- 始终提供内置中文字体；没有受支持的中文系统字体时默认选中。修正原“内置宋体”的不准确命名。
+  Always offer the built-in Chinese font and default to it without supported Chinese system fonts; correct the misleading “built-in SimSun” label.
+- 字体、字号、坐标、工具等控件只有获得焦点时才响应滚轮，避免滚动经过时误改值。
+  Require keyboard focus before wheel changes to font, size, position or tool controls.
+- 72 项回归通过，增加小窗口按钮可见与点击、仅英文系统字体下中文添加 / 重编辑、滚轮焦点保护；便携验证使用内置字体。
+  72 regressions pass, including small-window visibility/click, Chinese insertion/re-edit with Latin-only font inventory and wheel focus; exercise the built-in font in packaged checks.
+
 ## v0.5.0-rc.3 — 2026-09-23
 
 - 新增框内左 / 中 / 右对齐，多行文字按同一文字框对齐；预览、重编辑、工程与恢复保留设置。
