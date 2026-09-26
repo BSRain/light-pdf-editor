@@ -1,4 +1,4 @@
-# Light PDF Editor v0.5.0-rc.2 · Qt Edition · Personal Use
+# Light PDF Editor v0.5.0-rc.3 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -111,7 +111,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe benchmark_workflows.py --runs 5
 ```
 
-64 tests cover worker exit, interrupted edits, restart confirmation/cancellation, reopening the last export, independent boxes surviving redaction, Chinese font/pixel preservation, overlapping-box selection/cancel, reselect/move/update/cancel, preservation of overlapping original text, continued editing after export, encrypted object replacement, double-click token selection, precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
+69 tests cover worker exit, interrupted edits, restart confirmation/cancellation, reopening the last export, independent boxes surviving redaction, Chinese font/pixel preservation, overlapping-box selection/cancel, reselect/move/update/cancel, preservation of overlapping original text, continued editing after export, encrypted object replacement, double-click token selection, precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
 
 | File | Purpose |
 | --- | --- |
@@ -163,3 +163,9 @@ Only the last successful snapshot is recoverable; later changes may be lost. Inp
 - Large baseline spacing no longer falsely rejects a single line; compact cells use the actual font height.
 - Boxes narrower than one character are rejected with an explicit widening hint, preventing horizontal overflow.
 - Synthetic bold for fonts without a dedicated bold file, such as SimSun, uses stroke width proportional to font size. The previous extra multiplication by font size is removed.
+
+## v0.5.0-rc.3 box alignment and rotated selection
+
+**框内对齐** supports left, center and right alignment within each text box; centering works directly with table-cell placement. X always denotes the box's left edge, and clicks/drags position the box. Style sampling resets to left alignment instead of guessing the source paragraph's alignment.
+
+Alignment survives preview, re-editing, projects and recovery. Files containing the new alignment setting require v0.5.0-rc.3 or newer; older projects remain readable. Precise font metrics fix selection boxes displaced from SimSun and similar text on 180-degree pages.

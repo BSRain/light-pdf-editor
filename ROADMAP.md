@@ -3,13 +3,13 @@
 > 自用 / Personal use。以下是计划，不代表已实现；按实际使用反馈调整优先级，不预设发布日期。
 > Planned work, not released features. Priorities follow personal-use feedback; no release dates are promised.
 
-## 当前版本 / Current: v0.5.0-rc.2
+## 当前版本 / Current: v0.5.0-rc.3
 
 Qt 界面、独立 PDF 处理进程、可见区域分块渲染、原文基线与边缘吸附、字体样式取样、增删文字、字符 / 词段选择与删除预览、本次会话新增文字再次编辑、重叠框选择、删除后保留独立文字框、相邻文字保护、加粗、撤销 / 重做、拖放、加密文件保存。
 
 Qt UI, isolated PDF worker, viewport tiles, baseline/edge snapping, style sampling, text insertion/deletion, character/token selection with deletion preview, session-created text re-editing, overlapping-box picker, independent boxes preserved across deletion, neighboring-text checks, bold, undo/redo, drag-and-drop, encrypted export.
 
-当前候选版补充了紧凑文字框高度判断、单字符宽度保护和模拟加粗修复；下一轮继续检查旋转文字的选择框定位。 / The current candidate fixes compact text fitting, glyph-width overflow and synthetic bold; next, verify selection geometry for rotated text.
+当前候选版补充了紧凑文字框高度判断、单字符宽度保护和模拟加粗修复；并已修正旋转文字选择框，新增框内居中 / 右对齐。 / The current candidate fixes compact text fitting, glyph-width overflow, synthetic bold and rotated selection geometry, and adds centered/right-aligned text boxes.
 
 ## 分阶段计划 / Next versions
 
@@ -23,7 +23,7 @@ Work proceeds in this order, with tests before each release. Versions identify w
 | 已发布 / Released | v0.4.2 自动恢复 / Recovery | 可选自动保存、未应用草稿恢复。 / Optional autosave and unapplied draft recovery. | 恢复不覆盖原稿；加密文档不明文保存密码或解密副本；失败不阻塞编辑。 / Preserve originals and encryption, never persist passwords; failure must not block editing. |
 | 3 | v0.5.0 Windows 交付 / Windows delivery | 便携 EXE、依赖打包、高 DPI / 多显示器适配、无 Python 环境验证。 / Portable EXE, bundled dependencies, high-DPI/multi-monitor support, clean-machine validation. | 无 Python 的 Windows 测试环境可打开、拖放、编辑、撤销并导出；提供安装包哈希与已知限制。 / Open/drop/edit/undo/export on Windows without Python; published package hashes and limitations. |
 
-## 本轮进展 / Current: v0.5.0-rc.2
+## 本轮进展 / Current: v0.5.0-rc.3
 
 - Windows x64 便携候选版、共享依赖的无控制台界面 / 工作进程、构建脚本、对应源码与许可证、SHA-256 校验值。 / Portable Windows x64 candidate, windowless GUI/worker with shared libraries, build scripts, matching source/licenses and SHA-256 checksums.
 - 已完成本机移位 / 中文空格路径验证；全新无 Python 系统和物理多显示器仍待验证，因此尚不标为 v0.5.0 正式版。 / Relocated Unicode/space-path local validation; clean Windows without Python and physical multi-monitor checks remain pending, so v0.5.0 is not yet final.

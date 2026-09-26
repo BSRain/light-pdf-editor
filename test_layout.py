@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 import unittest
 import pymupdf as fitz
-from pdf_core import add_text, ruling_lines, text_spans, windows_fonts
+from pdf_core import add_text, ruling_lines, text_spans, windows_fonts, text_characters, delete_characters
 from pdf_worker import Engine
 from alignment import snap_box, sample_line_spacing, containing_cell, match_font
 
@@ -154,6 +154,40 @@ class LayoutTests(unittest.TestCase):
                     ink.append(sum(v < 180 for v in pix.samples[::pix.n]))
                 self.assertGreater(ink[1], ink[0])
                 self.assertLess(ink[1], ink[0] * 2.5)
+
+    def test_rotated_simsun_character_boxes_and_neighbor_preservation(self):
+        for rotation in (0, 90, 180, 270):
+            with self.subTest(rotation=rotation), fitz.open() as doc:
+                p = doc.new_page(width=600, height=800)
+                p.set_rotation(rotation)
+                add_text(p, 40, 50, '甲乙丙\n丁戊己', 14, (0,0,0), windows_fonts()['宋体'], 200, 50, line_spacing=14.2)
+                chars = text_characters(p)
+                first = next(c for c in chars if c['text'] == '甲')
+                second = next(c for c in chars if c['text'] == '丁')
+                self.assertAlmostEqual(first['bbox'][1], 50, delta=.03)
+                self.assertAlmostEqual(second['bbox'][1], 64.2, delta=.03)
+                before = ''.join(c['text'] for c in chars)
+                delete_characters(p, [second['id']])
+                self.assertEqual(''.join(c['text'] for c in text_characters(p)), before.replace('丁',''))
+
+    def test_multiline_alignment_matches_box_across_rotations(self):
+        for rotation in (0, 90, 180, 270):
+            for align in (0, 1, 2):
+                for family in ('Arial', '宋体'):
+                    with self.subTest(rotation=rotation, align=align, family=family), fitz.open() as doc:
+                        p = doc.new_page(width=600, height=800)
+                        p.set_rotation(rotation)
+                        text = 'AB\nLonger line' if family == 'Arial' else '文字\n较长的一行文字'
+                        add_text(p, 40, 50, text, 14, (0,0,0), windows_fonts()[family], 240, 80,
+                                 line_spacing=26, align=align)
+                        spans = text_spans(p)
+                        self.assertEqual(len(spans), 2)
+                        for span in spans:
+                            left, top, right, bottom = span['bbox']
+                            # PDF font widths are quantized; allow subpixel cumulative advance rounding.
+                            if align == 0: self.assertAlmostEqual(left, 40, delta=.15)
+                            elif align == 1: self.assertAlmostEqual((left+right)/2, 160, delta=.15)
+                            else: self.assertAlmostEqual(right, 280, delta=.15)
 
     def test_invalid_line_pitch_rejected_without_change(self):
         with fitz.open() as doc:

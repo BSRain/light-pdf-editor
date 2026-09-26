@@ -53,6 +53,7 @@ def run(editor, output):
         editor.text_input.setPlainText('便携版验证\nPortable verification')
         editor.size.setValue(14)
         editor.line_spacing.setValue(26)
+        editor.text_align.setCurrentIndex(editor.text_align.findData(1))
         editor.font_combo.setCurrentText('微软雅黑' if '微软雅黑' in windows_fonts() else '内置宋体')
         editor.place_cell(QPointF(100, 160))
         wait(lambda: editor.draft and editor.draft.valid)
@@ -77,6 +78,7 @@ def run(editor, output):
         obj = editor.objects[0]
         editor.edit_at(QPointF(obj['bbox'][0]+10, obj['bbox'][1]+10))
         wait(lambda: not editor.busy and editor.draft and editor.draft.valid)
+        if editor.text_align.currentData() != 1: raise AssertionError('Project lost centered alignment')
         editor.text_input.setPlainText('工程重开验证\nReopened portable project')
         wait(lambda: editor.draft.valid)
         editor.apply(); wait(lambda: not editor.busy)

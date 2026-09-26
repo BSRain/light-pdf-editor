@@ -147,6 +147,27 @@ class ProjectTests(unittest.TestCase):
                 e.end_edit()
                 if e.doc: e.doc.close()
 
+    def test_alignment_uses_versioned_project_schema(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source, target = Path(folder)/'source.pdf', Path(folder)/'aligned.lpdf'
+            with fitz.open() as doc:
+                doc.new_page(); doc.save(source)
+            e = Engine()
+            try:
+                e.run(dict(kind='open', path=str(source)))
+                spec = dict(x=30, y=40, width=200, height=100, text='Centered', size=12, color=(0,0,0), align=1)
+                e.run(dict(kind='insert', spec=spec))
+                e.run(dict(kind='save_project', path=str(target)))
+                with fitz.open(target) as doc:
+                    data = json.loads(doc.embfile_get(ATTACHMENT))
+                    self.assertEqual(data['version'], 3)
+                result = e.run(dict(kind='open', path=str(target)))
+                self.assertEqual(result['objects'][0]['spec']['align'], 1)
+                self.assertAlmostEqual((result['spans'][0]['bbox'][0]+result['spans'][0]['bbox'][2])/2, 130, delta=.05)
+            finally:
+                e.end_edit()
+                if e.doc: e.doc.close()
+
     def test_bad_manifest_rejected_without_replacing_active_document(self):
         with tempfile.TemporaryDirectory() as folder:
             source, target = Path(folder)/'source.pdf', Path(folder)/'project.lpdf'
@@ -158,12 +179,13 @@ class ProjectTests(unittest.TestCase):
                 spec = dict(x=30, y=40, width=200, height=100, text='Safe text', size=12, color=(0,0,0))
                 e.run(dict(kind='insert', spec=spec))
                 e.run(dict(kind='save_project', path=str(target)))
-                for case in ('version', 'stream', 'bounds', 'nan'):
+                for case in ('version', 'stream', 'bounds', 'nan', 'alignment'):
                     with self.subTest(case=case), fitz.open(target) as doc:
                         data = json.loads(doc.embfile_get(ATTACHMENT))
                         if case == 'version': data['version'] = 999
                         elif case == 'stream': data['objects']['1']['streams'][0][1] = 'wrong'
                         elif case == 'bounds': data['objects']['1']['spec']['width'] = 100000
+                        elif case == 'alignment': data['objects']['1']['spec']['align'] = 9
                         else: data['objects']['1']['spec']['size'] = float('nan')
                         doc.embfile_del(ATTACHMENT)
                         doc.embfile_add(ATTACHMENT, json.dumps(data).encode())

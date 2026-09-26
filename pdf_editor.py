@@ -637,6 +637,12 @@ class Editor(QMainWindow):
         self.line_spacing.setToolTip('相邻行基线之间的距离；0 为字体默认行距。取样时尝试读取同列相邻行。')
         self.line_spacing.valueChanged.connect(self.content_changed)
         form.addRow('行距', self.line_spacing)
+        self.text_align = QComboBox()
+        for label, value in [('左对齐', 0), ('居中', 1), ('右对齐', 2)]:
+            self.text_align.addItem(label, value)
+        self.text_align.currentIndexChanged.connect(self.content_changed)
+        self.text_align.setToolTip('对齐文字框内的各行，不移动文字框；取样原文样式后默认左对齐。')
+        form.addRow('框内对齐', self.text_align)
         self.bold = QCheckBox('加粗')
         self.bold.toggled.connect(self.content_changed)
         form.addRow('', self.bold)
@@ -644,7 +650,7 @@ class Editor(QMainWindow):
         self.color_button.clicked.connect(self.choose_color)
         form.addRow('颜色', self.color_button)
         self.coords = {}
-        for key, label, value in [('x', '左侧 X', 40), ('baseline', '首行基线 Y', 60), ('width', '文字框宽', 260), ('height', '文字框高', 90)]:
+        for key, label, value in [('x', '文字框左侧 X', 40), ('baseline', '首行基线 Y', 60), ('width', '文字框宽', 260), ('height', '文字框高', 90)]:
             field = QDoubleSpinBox()
             field.setRange(0 if key in ('x', 'baseline') else 12, 20000)
             field.setDecimals(2)
@@ -708,7 +714,7 @@ class Editor(QMainWindow):
         self.apply_button.setEnabled(not value and self.draft is not None and self.draft.valid)
         if self.draft:
             self.draft.setEnabled(not value)
-        for control in (self.text_input, self.font_combo, self.size, self.line_spacing, self.bold, *self.coords.values()):
+        for control in (self.text_input, self.font_combo, self.size, self.line_spacing, self.text_align, self.bold, *self.coords.values()):
             control.setEnabled(not value)
 
     def discard(self):
@@ -1037,6 +1043,7 @@ class Editor(QMainWindow):
         self.text_input.setPlainText(spec['text'])
         self.size.setValue(spec['size'])
         self.line_spacing.setValue(spec.get('line_spacing') or 0)
+        self.text_align.setCurrentIndex(self.text_align.findData(spec.get('align', 0)))
         self.bold.setChecked(spec.get('bold', False))
         self.color = tuple(spec['color'])
         self.color_button.setStyleSheet('color: ' + QColor.fromRgbF(*self.color).name())
@@ -1055,7 +1062,7 @@ class Editor(QMainWindow):
         return dict(x=draft.x(), y=draft.y(), width=draft.w, height=draft.h,
                     text=self.text_input.toPlainText(), size=self.size.value(), color=self.color,
                     fontfile=self.fonts.get(self.font_combo.currentText()), bold=self.bold.isChecked(),
-                    line_spacing=self.line_spacing.value() or None)
+                    line_spacing=self.line_spacing.value() or None, align=self.text_align.currentData())
 
     def place_cell(self, point):
         if self.busy or not self.path:
@@ -1114,6 +1121,7 @@ class Editor(QMainWindow):
         self.size.setValue(span['size'])
         spacing = sample_line_spacing(span, self.spans)
         self.line_spacing.setValue(spacing or 0)
+        self.text_align.setCurrentIndex(0)
         self.bold.setChecked(span['bold'])
         color = span['color']
         self.color = (((color >> 16) & 255) / 255, ((color >> 8) & 255) / 255, (color & 255) / 255)

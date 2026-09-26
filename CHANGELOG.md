@@ -3,6 +3,17 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.5.0-rc.3 — 2026-09-23
+
+- 新增框内左 / 中 / 右对齐，多行文字按同一文字框对齐；预览、重编辑、工程与恢复保留设置。
+  Add left/center/right alignment within text boxes, retained through previews, re-editing, projects and recovery.
+- 使用精确字体度量修正旋转宋体的字符框偏移；按实际页面位置点击、逐字删除及相邻行保护已验证。
+  Use accurate font metrics to fix displaced rotated SimSun boxes; verified visual-position clicks, per-character deletion and neighboring-row preservation.
+- 新对齐字段采用工程格式版本 3，旧工程仍兼容；旧软件会拒绝新格式，避免忽略对齐设置。
+  Alignment uses project schema version 3 while retaining legacy readers; older app versions reject the new schema rather than silently lose alignment.
+- 69 项回归，覆盖中英文字体、四种旋转下的多行对齐、工程往返和旋转中文字形点击。
+  69 regressions cover Chinese/English fonts, multiline alignment across four rotations, project roundtrips and visual clicks on rotated Chinese text.
+
 ## v0.5.0-rc.2 — 2026-09-23
 
 - 复用 PDF 引擎的换行结果，按实际首 / 末行基线与字体下降部判断文字高度；修正大行距下单行文字误报溢出。字符宽度超过框宽时拒绝写入。

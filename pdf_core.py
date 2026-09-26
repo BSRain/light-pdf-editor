@@ -30,7 +30,9 @@ def bold_font_path(path):
     return str(candidate) if candidate and candidate.exists() else None
 
 
-def add_text(page, x, y, text, size, color, fontfile=None, width=None, height=None, bold=False, line_spacing=None):
+def add_text(page, x, y, text, size, color, fontfile=None, width=None, height=None, bold=False, line_spacing=None, align=0):
+    if type(align) is not int or align not in (0, 1, 2):
+        raise ValueError('请选择左对齐、居中或右对齐。')
     if line_spacing is not None and line_spacing <= 0:
         raise ValueError('行距必须大于零，或选择自动。')
     page_width, page_height = page.rect.width, page.rect.height
@@ -67,7 +69,7 @@ def add_text(page, x, y, text, size, color, fontfile=None, width=None, height=No
     layout_rect = fitz.Rect(x, y, x + box_width, y + layout_height) * page.derotation_matrix
     shape = page.new_shape()
     remaining = shape.insert_textbox(layout_rect, text, fontsize=size, fontname=fontname, fontfile=fontfile,
-                                   color=color, fill=color, rotate=page.rotation,
+                                   color=color, fill=color, rotate=page.rotation, align=align,
                                    lineheight=factor,
                                    render_mode=2 if synthetic_bold else 0,
                                    border_width=0.025 if synthetic_bold else 0.05)
@@ -87,7 +89,7 @@ def delete_text(page, visible_rect):
     # Avoid applying any redactions already in the source document.
     if any(a.type[0] == fitz.PDF_ANNOT_REDACT for a in (page.annots() or [])):
         raise ValueError('本页有已有的涂黑标记，请先在原软件中处理这些标记。')
-    chars = [c for b in page.get_text('rawdict')['blocks'] if 'lines' in b
+    chars = [c for b in page.get_text('rawdict', flags=(fitz.TEXTFLAGS_RAWDICT & ~fitz.TEXT_PRESERVE_IMAGES) | fitz.TEXT_ACCURATE_ASCENDERS)['blocks'] if 'lines' in b
              for line in b['lines'] for span in line['spans'] for c in span['chars']
              if fitz.Rect(c['bbox']).intersects(rect)]
     if not chars:
@@ -107,7 +109,9 @@ def text_spans(page):
     result = []
     matrix = page.rotation_matrix
     zero = fitz.Point(0, 0) * matrix
-    flags = fitz.TEXTFLAGS_DICT & ~fitz.TEXT_PRESERVE_IMAGES
+    # Accurate font metrics avoid shifted boxes from rounded PDF descriptors,
+    # notably SimSun on 180-degree pages. Keep character selection in sync.
+    flags = (fitz.TEXTFLAGS_DICT & ~fitz.TEXT_PRESERVE_IMAGES) | fitz.TEXT_ACCURATE_ASCENDERS
     for block in page.get_text('dict', flags=flags)['blocks']:
         for line in block.get('lines', []):
             direction = fitz.Point(line['dir']) * matrix - zero
@@ -127,7 +131,7 @@ def text_characters(page):
     """Stable per-page character IDs, in visible coordinates; no image extraction."""
     matrix = page.rotation_matrix
     result = []
-    flags = (fitz.TEXTFLAGS_RAWDICT & ~fitz.TEXT_PRESERVE_IMAGES) | fitz.TEXT_INHIBIT_SPACES
+    flags = (fitz.TEXTFLAGS_RAWDICT & ~fitz.TEXT_PRESERVE_IMAGES) | fitz.TEXT_INHIBIT_SPACES | fitz.TEXT_ACCURATE_ASCENDERS
     line_id = 0
     for block in page.get_text('rawdict', flags=flags)['blocks']:
         for line in block.get('lines', []):

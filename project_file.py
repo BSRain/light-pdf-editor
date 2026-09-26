@@ -15,7 +15,9 @@ def page_signature(page):
 
 
 def write_manifest(doc, objects, serial, index, recovery=False, draft=None):
-    data = dict(format='light-pdf-editor', version=2 if recovery else 1, objects=objects, serial=serial, index=index,
+    has_alignment = any('align' in obj['spec'] for obj in objects.values()) or (draft is not None and 'align' in draft['spec'])
+    format_version = 3 if has_alignment else (2 if recovery else 1)
+    data = dict(format='light-pdf-editor', version=format_version, objects=objects, serial=serial, index=index,
                 recovery=recovery, draft=draft,
                 pages=[page_signature(p) for p in doc])
     content = json.dumps(data, ensure_ascii=False, allow_nan=False).encode('utf-8')
@@ -32,7 +34,7 @@ def require(condition):
 
 
 def validate_spec(page, spec, allow_empty=False):
-    require(set(spec) <= {'x', 'y', 'width', 'height', 'text', 'size', 'color', 'fontfile', 'bold', 'line_spacing'})
+    require(set(spec) <= {'x', 'y', 'width', 'height', 'text', 'size', 'color', 'fontfile', 'bold', 'line_spacing', 'align'})
     require(isinstance(spec['text'], str) and (allow_empty or spec['text'].strip()))
     for name in ('x', 'y', 'width', 'height', 'size'):
         require(type(spec[name]) in (int, float) and math.isfinite(spec[name]))
@@ -43,6 +45,7 @@ def validate_spec(page, spec, allow_empty=False):
     require(len(spec['color']) == 3 and all(type(c) in (int, float) and 0 <= c <= 1 for c in spec['color']))
     require(spec.get('fontfile') is None or isinstance(spec['fontfile'], str))
     require(type(spec.get('bold', False)) is bool)
+    require(type(spec.get('align', 0)) is int and spec.get('align', 0) in (0, 1, 2))
     spacing = spec.get('line_spacing')
     require(spacing is None or (type(spacing) in (int, float) and math.isfinite(spacing) and 0 < spacing <= 1000))
 
@@ -54,7 +57,7 @@ def read_manifest(doc):
         raise ValueError('工程信息过大，无法打开。')
     try:
         data = json.loads(doc.embfile_get(ATTACHMENT))
-        if data['format'] != 'light-pdf-editor' or data['version'] not in (1, 2):
+        if data['format'] != 'light-pdf-editor' or type(data['version']) is not int or data['version'] not in (1, 2, 3):
             raise ValueError('工程版本不支持，请使用匹配版本的软件。')
         if data['pages'] != [page_signature(p) for p in doc]:
             raise ValueError('工程中的 PDF 页面已被其他软件改变，无法安全恢复文字框。')
@@ -67,6 +70,7 @@ def read_manifest(doc):
             require(key == obj['id'] and key.isdecimal() and 0 < int(key) <= data['serial'])
             require(type(obj['index']) is int and 0 <= obj['index'] < len(doc))
             spec = obj['spec']
+            require('align' not in spec or data['version'] == 3)
             page = doc[obj['index']]
             validate_spec(page, spec)
             require(type(obj['offset']) in (int, float) and math.isfinite(obj['offset']) and obj['offset'] > 0)
@@ -78,8 +82,9 @@ def read_manifest(doc):
                 used.add(xref)
         draft = data.get('draft')
         if draft is not None:
-            require(data['version'] == 2 and data.get('recovery') is True)
+            require(data['version'] in (2, 3) and data.get('recovery') is True)
             require(type(draft['index']) is int and draft['index'] == data['index'])
+            require('align' not in draft['spec'] or data['version'] == 3)
             validate_spec(doc[draft['index']], draft['spec'], allow_empty=True)
             require(type(draft['offset']) in (int, float) and math.isfinite(draft['offset']) and draft['offset'] > 0)
             edit_id = draft['editing_id']

@@ -475,6 +475,59 @@ class QtTests(unittest.TestCase):
         self.wait(lambda: not e.busy)
         self.assertTrue(any('Aligned' in s['text'] for s in e.spans))
 
+    def test_rotated_chinese_visual_click_selects_correct_row(self):
+        e = self.editor
+        path = Path(self.temp.name) / 'rotated-chinese.pdf'
+        with fitz.open() as doc:
+            p = doc.new_page(width=600, height=800)
+            p.set_rotation(180)
+            add_text(p, 40, 50, '甲乙丙\n丁戊己', 14, (0,0,0), windows_fonts()['宋体'], 200, 50, line_spacing=14.2)
+            doc.save(path)
+        e.open_pdf(str(path))
+        self.wait(lambda: not e.busy and e.path == path)
+        e.mode.setCurrentIndex(e.mode.findData('precise'))
+        # Click known visual positions, independent of extracted character boxes.
+        for y, expected in ((57, '甲'), (71, '丁')):
+            point = e.view.mapFromScene(QPointF(47, y))
+            QTest.mouseClick(e.view.viewport(), Qt.MouseButton.LeftButton, pos=point)
+            selected = ''.join(c['text'] for c in e.characters if c['id'] in e.view.selected_chars)
+            self.assertEqual(selected, expected)
+        e.delete_characters()
+        self.wait(lambda: not e.busy)
+        text = ''.join(c['text'] for c in e.characters)
+        self.assertIn('甲', text)
+        self.assertNotIn('丁', text)
+        e.undo()
+        self.wait(lambda: not e.busy)
+        self.assertIn('丁', ''.join(c['text'] for c in e.characters))
+
+    def test_alignment_survives_project_and_reedit(self):
+        e = self.editor
+        self.make_draft()
+        e.text_align.setCurrentIndex(e.text_align.findData(1))
+        self.wait(lambda: e.draft.valid)
+        x, width = e.draft.x(), e.draft.w
+        e.apply()
+        self.wait(lambda: not e.busy)
+        span = next(s for s in e.spans if 'Aligned' in s['text'])
+        self.assertAlmostEqual((span['bbox'][0]+span['bbox'][2])/2, x+width/2, delta=.15)
+        target = Path(self.temp.name)/'aligned.lpdf'
+        with patch('pdf_editor.QFileDialog.getSaveFileName', return_value=(str(target), '')):
+            e.save_project()
+        self.wait(lambda: not e.busy)
+        e.open_pdf(str(target))
+        self.wait(lambda: not e.busy and e.path == target)
+        obj = e.objects[0]
+        e.edit_at(QPointF(obj['bbox'][0]+10, obj['bbox'][1]+10))
+        self.wait(lambda: not e.busy and e.draft and e.draft.valid)
+        self.assertEqual(e.text_align.currentData(), 1)
+        e.text_align.setCurrentIndex(e.text_align.findData(2))
+        self.wait(lambda: e.draft.valid)
+        e.apply()
+        self.wait(lambda: not e.busy)
+        span = next(s for s in e.spans if 'Aligned' in s['text'])
+        self.assertAlmostEqual(span['bbox'][2], x+width, delta=.15)
+
     def kill_worker(self):
         self.editor.client.process.kill()
         self.wait(lambda: self.editor.client.dead)
