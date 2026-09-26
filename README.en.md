@@ -1,4 +1,4 @@
-# Light PDF Editor v0.5.0-rc.4 · Qt Edition · Personal Use
+# Light PDF Editor v0.5.0-rc.5 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -7,6 +7,8 @@ English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGE
 ![Qt editor with baseline snapping](ui_preview.png)
 
 A Windows desktop PDF text editor with a Chinese interface. This version replaces the Tkinter implementation with **PySide6 / Qt and a separate PDF worker process**. Files are processed locally.
+
+Precise deletion now filters candidate glyphs spatially on dense pages; see [benchmark scope and measured results](BENCHMARKS.md).
 
 ## Portable Windows release candidate
 
@@ -166,8 +168,8 @@ Only the last successful snapshot is recoverable; later changes may be lost. Inp
 - Boxes narrower than one character are rejected with an explicit widening hint, preventing horizontal overflow.
 - Synthetic bold for fonts without a dedicated bold file, such as SimSun, uses stroke width proportional to font size. The previous extra multiplication by font size is removed.
 
-## v0.5.0-rc.4 box alignment and rotated selection
+## v0.5.0-rc.3 box alignment and rotated selection
 
 **框内对齐** supports left, center and right alignment within each text box; centering works directly with table-cell placement. X always denotes the box's left edge, and clicks/drags position the box. Style sampling resets to left alignment instead of guessing the source paragraph's alignment.
 
-Alignment survives preview, re-editing, projects and recovery. Files containing the new alignment setting require v0.5.0-rc.4 or newer; older projects remain readable. Precise font metrics fix selection boxes displaced from SimSun and similar text on 180-degree pages.
+Alignment survives preview, re-editing, projects and recovery. Files containing the new alignment setting require v0.5.0-rc.3 or newer; older projects remain readable. Precise font metrics fix selection boxes displaced from SimSun and similar text on 180-degree pages.

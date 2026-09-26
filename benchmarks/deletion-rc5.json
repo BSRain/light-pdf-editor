@@ -1,0 +1,30 @@
+{
+  "before": {
+    "version": "0.5.0-rc.4",
+    "pymupdf": "1.26.7",
+    "characters": 3600,
+    "deleted": 600,
+    "runs_ms": [
+      7106.42,
+      7141.62,
+      6768.1
+    ],
+    "median_ms": 7106.42,
+    "note": "Synthetic dense page; full worker deletion response including safety checks and thumbnail. Local timings, not a general speed guarantee.",
+    "commit": "651e64f"
+  },
+  "after": {
+    "version": "0.5.0-rc.4",
+    "pymupdf": "1.26.7",
+    "characters": 3600,
+    "deleted": 600,
+    "runs_ms": [
+      2792.05,
+      2747.87,
+      2732.48
+    ],
+    "median_ms": 2747.87,
+    "note": "Synthetic dense page; full worker deletion response including safety checks and thumbnail. Local timings, not a general speed guarantee.",
+    "variant": "rc.4 plus spatial-filter working tree, shipped in rc.5"
+  }
+}

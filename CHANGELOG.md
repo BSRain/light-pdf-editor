@@ -3,6 +3,17 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.5.0-rc.5 — 2026-09-26
+
+- 74 项回归通过；便携包补齐性能原始记录。 / 74 regressions pass; include raw benchmark records in the portable source bundle.
+
+- 精细删除按纵向位置筛选可能重叠的保护字符，避免每个选中字符都遍历全页；超大或异常字符框回退完整扫描。
+  Filter protected glyphs by vertical bands during precise deletion; oversized or abnormal boxes fall back to a full scan.
+- 保留原始字符顺序、重叠区域保护、删除后内容 / 坐标验证及失败回滚。
+  Preserve source order, overlap protection, post-deletion text/geometry validation and failure rollback.
+- 生成的 3,600 字符页面删除 600 字符，工作进程响应三次中位耗时从 7,106.42 ms 降到 2,747.87 ms；结果含保护检查和缩略图，不代表所有文档。见 BENCHMARKS.md。
+  On a synthetic 3,600-character page deleting 600 glyphs, median worker response falls from 7,106.42 to 2,747.87 ms over three runs, including safety checks and thumbnail generation. This is not a universal guarantee; see BENCHMARKS.md.
+
 ## v0.5.0-rc.4 — 2026-09-26
 
 - 应用 / 取消按钮固定在属性面板底部，小窗口与高 DPI 下无需滚到底部才能操作。

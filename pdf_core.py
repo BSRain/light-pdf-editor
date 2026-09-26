@@ -2,6 +2,7 @@
 from pathlib import Path
 import os
 import hashlib
+import math
 from functools import lru_cache
 import pymupdf as fitz
 
@@ -143,6 +144,38 @@ def text_characters(page):
     return result
 
 
+class CharacterRectIndex:
+    """Conservative Y-band lookup; retain source order for overlap subtraction."""
+    def __init__(self, rects):
+        self.rects = rects
+        self.bands = {}
+        self.wide = []
+        for index, rect in enumerate(rects):
+            bands = self.band_range(rect)
+            if bands is None:
+                self.wide.append(index)
+            else:
+                for band in bands:
+                    self.bands.setdefault(band, []).append(index)
+
+    @staticmethod
+    def band_range(rect):
+        if not math.isfinite(rect.y0) or not math.isfinite(rect.y1):
+            return None
+        first, last = math.floor(rect.y0 / 32), math.floor(rect.y1 / 32)
+        # Huge/abnormal glyph boxes fall back to a scan, never unbounded buckets.
+        return range(first, last + 1) if 0 <= last - first < 64 else None
+
+    def candidates(self, rect):
+        bands = self.band_range(rect)
+        if bands is None:
+            return self.rects
+        indices = set(self.wide)
+        for band in bands:
+            indices.update(self.bands.get(band, ()))
+        return [self.rects[index] for index in sorted(indices)]
+
+
 def delete_characters(page, ids):
     """Use exclusive glyph regions so adjacent/overlapping glyphs are protected."""
     if any(a.type[0] == fitz.PDF_ANNOT_REDACT for a in (page.annots() or [])):
@@ -152,13 +185,14 @@ def delete_characters(page, ids):
     if not selected or not selected.issubset(range(len(chars))):
         raise ValueError('文字选区已失效，请重新选择。')
     protected = [fitz.Rect(c['bbox']) * page.derotation_matrix for c in chars if c['id'] not in selected]
+    protected_index = CharacterRectIndex(protected)
     regions = []
     for char in chars:
         if char['id'] not in selected:
             continue
         box = fitz.Rect(char['bbox']) * page.derotation_matrix
         pieces = [box]
-        for other in protected:
+        for other in protected_index.candidates(box):
             if not box.intersects(other):
                 continue
             remaining = []

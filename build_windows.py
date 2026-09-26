@@ -37,6 +37,10 @@ def main():
         p.name == 'start.bat' or p.name.startswith('ui_') and p.suffix == '.png')]
     for path in selected:
         shutil.copy2(path, source / path.name)
+    benchmark_source = source / 'benchmarks'
+    benchmark_source.mkdir(exist_ok=True)
+    for path in (ROOT / 'benchmarks').glob('*.json'):
+        shutil.copy2(path, benchmark_source / path.name)
     packages = ('PyMuPDF', 'PySide6', 'PySide6_Essentials', 'PySide6_Addons', 'shiboken6', 'Pillow', 'PyInstaller')
     notices = []
     for package in packages:

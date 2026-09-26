@@ -44,3 +44,13 @@ Export switches garbage=4 to garbage=2: unused objects are removed and xrefs com
 ```
 
 [全部原始样本 / Raw samples](benchmarks/v0.3.3.json) 包含启动、再次编辑、撤销、重做和逐次内存数据。生成 PDF 与本地运行报告不进入版本控制。 / Includes startup, re-edit, undo/redo and per-run memory. Generated PDFs/local run reports are not committed.
+
+## rc.5 精细删除 / Precise deletion
+
+同机生成 Courier 字体 60 行 × 60 字符页面，删除每行前 10 字符；每次新启工作进程，计时包含删除保护、缩略图、元数据及管道返回，并验证撤销恢复全部字符。三次运行中位数：rc.4 **7,106.42 ms** → 本轮空间筛选 **2,747.87 ms**（约减少 61%）。不是滚轮帧率，也不代表所有 PDF。
+
+A generated 60-row × 60-character Courier page deletes the first 10 glyphs per row. Each run uses a fresh worker; timing includes protection checks, thumbnail, metadata and pipe response, with complete character restoration checked after undo. Three-run medians: rc.4 **7,106.42 ms** → spatial filtering **2,747.87 ms**, approximately 61% lower. This measures neither wheel frame rate nor every PDF workload.
+
+原始记录 / Raw data: [deletion-rc5.json](benchmarks/deletion-rc5.json). 优化后测量发生在版本号更新前，记录明确标注工作区变体。The after measurement precedes the version bump and explicitly identifies the working-tree variant.
+
+复现 / Reproduce: `.venv\Scripts\python.exe benchmark_deletion.py --output tmp/deletion.json --runs 3`
