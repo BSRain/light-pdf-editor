@@ -11,7 +11,7 @@ import tempfile
 import pymupdf as fitz
 from process_metrics import process_memory
 from project_file import ATTACHMENT, write_manifest, read_manifest, validate_spec
-from pdf_core import erase_image_region, add_text, delete_text, text_spans, baseline_offset, text_characters, delete_characters, ruling_lines
+from pdf_core import sample_background, erase_image_region, add_text, delete_text, text_spans, baseline_offset, text_characters, delete_characters, ruling_lines
 
 
 class Engine:
@@ -98,7 +98,7 @@ class Engine:
             bbox=[spec['x'], spec['y'], spec['x'] + spec['width'], spec['y'] + spec['height']],
             streams=[(x, hashlib.sha256(self.doc.xref_stream(x)).hexdigest()) for x in streams])
 
-    def delete_preserving_objects(self, index, rect=None, ids=None, images=False):
+    def delete_preserving_objects(self, index, rect=None, ids=None, images=False, fill_color=(1,1,1)):
         chars = text_characters(self.doc[index])
         original_fonts = self.doc[index].get_fonts()
         if ids is not None:
@@ -141,7 +141,7 @@ class Engine:
             delete_characters(self.doc[index], remapped)
         else:
             if images:
-                erase_image_region(self.doc[index], rect)
+                erase_image_region(self.doc[index], rect, fill_color)
             else:
                 delete_text(self.doc[index], rect)
         contents = self.doc[index].get_contents()
@@ -229,6 +229,10 @@ class Engine:
         if self.doc is None:
             raise ValueError('请先打开 PDF。')
         index = request.get('index', 0)
+        if kind == 'sample_background':
+            if request.get('revision') != self.revision:
+                raise ValueError('页面已变化，请重新取色。')
+            return dict(color=sample_background(self.doc[index], request.get('rect'), request.get('point')))
         if kind == 'begin_edit':
             if self.edit_doc is not None:
                 raise ValueError('请先应用或取消当前文字编辑。')
@@ -275,7 +279,7 @@ class Engine:
                 elif kind == 'erase_image':
                     if request.get('revision') != self.revision:
                         raise ValueError('页面已变化，请重新选择图片区域。')
-                    self.delete_preserving_objects(index, rect=request['rect'], images=True)
+                    self.delete_preserving_objects(index, rect=request['rect'], images=True, fill_color=request.get('fill_color', (1,1,1)))
                 elif kind == 'delete_chars':
                     if request.get('revision') != self.revision:
                         raise ValueError('页面已变化，请重新选择文字。')

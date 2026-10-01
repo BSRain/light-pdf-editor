@@ -10,7 +10,7 @@ from uuid import uuid4
 from PySide6.QtCore import Qt, QObject, Signal, QProcess, QTimer, QPointF, QRectF
 from PySide6.QtGui import QAction, QColor, QPainter, QPen, QPixmap, QImage, QFont, QPainterPath
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QGraphicsView, QGraphicsScene,
-    QGraphicsObject, QVBoxLayout, QFormLayout, QLabel, QPushButton, QToolBar, QComboBox,
+    QGraphicsObject, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton, QToolBar, QComboBox,
     QDoubleSpinBox, QCheckBox, QPlainTextEdit, QDockWidget, QFileDialog, QMessageBox,
     QColorDialog, QInputDialog, QLineEdit, QScrollArea, QStyleFactory)
 from pdf_core import windows_fonts
@@ -381,6 +381,11 @@ class PdfView(QGraphicsView):
             event.accept()
             return
         point = self.mapToScene(event.position().toPoint())
+        if event.button() == Qt.MouseButton.LeftButton and self.editor.picking_background and not self.editor.busy:
+            if self.editor.page_rect.contains(point):
+                self.editor.request_background(point)
+            event.accept()
+            return
         draft = self.editor.draft or self.editor.erase_selection
         if event.button() == Qt.MouseButton.LeftButton and draft and draft.hit(draft.mapFromScene(point)):
             super().mousePressEvent(event)
@@ -567,6 +572,15 @@ class Editor(QMainWindow):
         self.page_rect = QRectF()
         self.draft = None
         self.erase_selection = None
+        self.erase_color = (1.0, 1.0, 1.0)
+        self.erase_auto_color = True
+        self.erase_color_ready = False
+        self.background_version = 0
+        self.picking_background = False
+        self.background_timer = QTimer(self)
+        self.background_timer.setSingleShot(True)
+        self.background_timer.setInterval(150)
+        self.background_timer.timeout.connect(self.request_background)
         self.guides = []
         self.color = (0.0, 0.0, 0.0)
         self.fonts = windows_fonts()
@@ -657,6 +671,7 @@ class Editor(QMainWindow):
         self.delete_chars_action.setEnabled(False)
         self.delete_chars_action.setToolTip('预览红色字符选区后点击删除；在页面上也可按 Delete，Esc 取消。')
         self.action(editing, '框选删除', lambda: self.mode.setCurrentIndex(self.mode.findData('delete')))
+        self.action(editing, '图片擦除 / 填底色', lambda: self.mode.setCurrentIndex(self.mode.findData('erase_image')))
         self.action(editing, '点选删除', lambda: self.mode.setCurrentIndex(self.mode.findData('erase')))
         self.snap = QCheckBox('吸附原文基线 / 边缘（Alt 暂停）')
         self.snap.setChecked(True)
@@ -744,6 +759,19 @@ class Editor(QMainWindow):
         panel_layout.addWidget(scroll, 1)
         footer_widget = QWidget()
         footer_layout = QVBoxLayout(footer_widget)
+        self.background_controls = QWidget()
+        color_layout = QHBoxLayout(self.background_controls)
+        color_layout.setContentsMargins(0,0,0,0)
+        self.background_auto = QPushButton('自动底色')
+        self.background_auto.clicked.connect(self.use_auto_background)
+        self.background_pick = QPushButton('页面取色')
+        self.background_pick.clicked.connect(self.begin_background_pick)
+        self.background_color = QPushButton('底色…')
+        self.background_color.clicked.connect(self.choose_background_color)
+        for button in (self.background_auto,self.background_pick,self.background_color):
+            color_layout.addWidget(button)
+        self.background_controls.hide()
+        footer_layout.addWidget(self.background_controls)
         self.preview_label = QLabel('点击页面放置文字；对齐时出现蓝色参考线。')
         self.preview_label.setWordWrap(True)
         self.preview_label.setMaximumHeight(64)
@@ -779,8 +807,9 @@ class Editor(QMainWindow):
         self.redo_action.setEnabled(not value and self.can_redo)
         self.delete_chars_action.setEnabled(not value and bool(self.view.selected_chars))
         self.mode.setEnabled(not value)
+        self.background_controls.setEnabled(not value)
         self.recovery_toggle.setEnabled(not value)
-        self.apply_button.setEnabled(not value and (self.erase_selection is not None or self.draft is not None and self.draft.valid))
+        self.apply_button.setEnabled(not value and (self.erase_selection is not None and self.erase_color_ready or self.draft is not None and self.draft.valid))
         if self.erase_selection:
             self.erase_selection.setEnabled(not value)
         if self.draft:
@@ -887,6 +916,18 @@ class Editor(QMainWindow):
             self.last_saved_path = None
             self.stop_recovery()
             self.pending_recovery_draft = None
+        if kind == 'sample_background':
+            if request.get('version') != self.background_version or self.erase_selection is None:
+                return
+            if 'error' in response:
+                self.erase_color_ready = False
+                self.apply_button.setEnabled(False)
+                self.preview_label.setText(response['error'])
+            else:
+                self.erase_color = tuple(response['data']['color'])
+                self.erase_color_ready = True
+                self.refresh_background_label()
+            return
         if 'error' in response:
             if kind == 'preview':
                 if request.get('version') == self.preview_version and self.draft:
@@ -1061,6 +1102,8 @@ class Editor(QMainWindow):
             self.view.centerOn(self.page_rect.center())
 
     def mode_changed(self):
+        if hasattr(self, 'background_controls'):
+            self.background_controls.setVisible(self.mode.currentData() == 'erase_image')
         self.view.clear_erase_hover()
         self.view.clear_character_selection()
         if hasattr(self, 'text_input') and (self.erase_selection is not None or self.editing_id is not None or self.mode.currentData() in ('delete', 'erase', 'precise', 'edit', 'cell', 'erase_image')):
@@ -1279,6 +1322,9 @@ class Editor(QMainWindow):
         if self.erase_selection:
             self.view.scene().removeItem(self.erase_selection)
             self.erase_selection = None
+        self.background_timer.stop()
+        self.background_version += 1
+        self.picking_background = False
         editing_id = self.editing_id
         self.editing_id = None
         self.view.clear_character_selection()
@@ -1343,23 +1389,85 @@ class Editor(QMainWindow):
         self.update_erase_preview()
 
     def update_erase_preview(self, *_):
+        if self.erase_selection is None:
+            return
+        self.picking_background = False
+        if self.erase_auto_color:
+            self.background_version += 1
+            self.erase_color_ready = False
+            self.background_timer.start()
+        self.refresh_background_label()
+
+    def refresh_background_label(self):
         box = self.erase_selection
         if box is None:
             return
-        self.apply_button.setText('确认擦除  Ctrl+Enter')
-        self.apply_button.setEnabled(not self.busy)
-        self.preview_label.setText(f'待擦除：X {box.x():.1f}，Y {box.y():.1f}，{box.w:.1f} × {box.h:.1f} pt。拖动 / 调整边角后确认。')
-        self.preview_label.setToolTip('红色选区仅为范围预览；确认后图片像素变白，选区内文字层也将删除。Esc 取消。')
+        color = QColor.fromRgbF(*self.erase_color)
+        self.background_color.setText(color.name()+'…')
+        self.background_color.setStyleSheet('border: 3px solid '+color.name())
+        self.apply_button.setText('确认擦除 / 填底色')
+        self.apply_button.setEnabled(not self.busy and self.erase_color_ready)
+        status = color.name() if self.erase_color_ready else '正在取样…'
+        self.preview_label.setText(f'待擦除 {box.w:.1f} × {box.h:.1f} pt；底色 {status}。可取色或选色后确认。')
+        self.preview_label.setToolTip('真实清除选区图片像素及文字层，再填充选定底色；纯色填充不重建渐变或纹理。')
+
+    def request_background(self, point=None):
+        box = self.erase_selection
+        if box is None or self.busy:
+            return
+        self.background_timer.stop()
+        self.background_version += 1
+        self.picking_background = False
+        self.erase_color_ready = False
+        fields = dict(kind='sample_background', epoch=self.epoch, index=self.index,
+                      revision=self.revision, version=self.background_version)
+        if point is not None:
+            self.erase_auto_color = False
+            fields['point'] = [point.x(), point.y()]
+        else:
+            fields['rect'] = [box.x(),box.y(),box.x()+box.w,box.y()+box.h]
+        self.client.preview = fields
+        self.client.dispatch()
+        self.refresh_background_label()
+
+    def use_auto_background(self):
+        self.erase_auto_color = True
+        self.update_erase_preview()
+
+    def begin_background_pick(self):
+        if self.busy or self.erase_selection is None:
+            self.statusBar().showMessage('请先框选待擦除区域。',4000)
+            return
+        self.background_timer.stop()
+        self.background_version += 1
+        self.picking_background = True
+        self.erase_color_ready = False
+        self.apply_button.setEnabled(False)
+        self.preview_label.setText('请点击页面上的干净背景取色；Esc 取消预览。')
+
+    def set_background_color(self, color):
+        self.background_timer.stop()
+        self.background_version += 1
+        self.erase_auto_color = False
+        self.picking_background = False
+        self.erase_color = (color.redF(),color.greenF(),color.blueF())
+        self.erase_color_ready = True
+        self.refresh_background_label()
+
+    def choose_background_color(self):
+        color = QColorDialog.getColor(QColor.fromRgbF(*self.erase_color),self,'擦除后填充的底色')
+        if color.isValid():
+            self.set_background_color(color)
 
     def confirm_image_erase(self):
         box = self.erase_selection
-        if self.busy or box is None or self.mode.currentData() != 'erase_image':
+        if self.busy or box is None or not self.erase_color_ready or self.mode.currentData() != 'erase_image':
             return
         rect = [box.x(), box.y(), box.x()+box.w, box.y()+box.h]
         self.epoch += 1
         self.set_busy(True)
         self.client.command('erase_image', epoch=self.epoch, index=self.index,
-                            revision=self.revision, rect=rect)
+                            revision=self.revision, rect=rect, fill_color=self.erase_color)
         self.statusBar().showMessage('正在擦除选中图片区域…')
 
     def delete_characters(self):

@@ -4,9 +4,10 @@ import io
 from pathlib import Path
 import tempfile
 import unittest
-from PIL import Image
+from PIL import Image, ImageDraw
 import pymupdf as fitz
 from pdf_worker import Engine
+from pdf_core import sample_background, erase_image_region
 
 
 def scan_fixture(path, rotation=0, encrypted=False, shared=False):
@@ -125,3 +126,38 @@ class ImageEraseTests(unittest.TestCase):
             finally:
                 e.end_edit()
                 if e.doc: e.doc.close()
+
+
+class BackgroundFillTests(unittest.TestCase):
+    def test_auto_background_rotations_pixel_erasure_and_color_export(self):
+        for rotation in (0,90,180,270):
+            with self.subTest(rotation=rotation), fitz.open() as doc:
+                im=Image.new('RGB',(300,300),(232,219,170))
+                ImageDraw.Draw(im).rectangle((70,80,120,100),fill=(0,0,0))
+                stream=io.BytesIO(); im.save(stream,format='PNG')
+                page=doc.new_page(width=300,height=300)
+                page.insert_image(page.rect,stream=stream.getvalue())
+                page.set_rotation(rotation)
+                area=fitz.Rect(60,70,130,110)*page.rotation_matrix
+                color=sample_background(page,list(area))
+                self.assertEqual([round(v*255) for v in color],[232,219,170])
+                erase_image_region(page,list(area),color)
+                with fitz.open(stream=doc.tobytes(garbage=2),filetype='pdf') as saved:
+                    pix=saved[0].get_pixmap()
+                    pt=area.tl+fitz.Point(15,15)
+                    self.assertTrue(all(abs(a-b)<=1 for a,b in zip(pix.pixel(int(pt.x),int(pt.y)),(232,219,170))))
+                    # Extracting the new raster cannot recover the removed black text.
+                    for info in saved[0].get_images():
+                        image=fitz.Pixmap(saved,info[0])
+                        self.assertNotEqual(image.pixel(90,90),(0,0,0))
+
+    def test_page_point_sampling_and_invalid_fill(self):
+        with fitz.open() as doc:
+            p=doc.new_page(width=100,height=100)
+            p.draw_rect(p.rect,color=None,fill=(.2,.4,.6))
+            color=sample_background(p,point=[50,50])
+            self.assertTrue(all(abs(a-b)<.01 for a,b in zip(color,(.2,.4,.6))))
+            with self.assertRaises(ValueError):
+                erase_image_region(p,[10,10,20,20],[-1,1,1])
+            with self.assertRaises(ValueError):
+                sample_background(p,point=[-1,50])

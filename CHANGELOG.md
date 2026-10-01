@@ -3,6 +3,15 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.5.0-rc.8 — 2026-10-01
+
+- 85 项回归通过。 / 85 regressions pass.
+
+- 图片擦除增加自动底色、页面取色和自选颜色，先清除像素 / OCR 再填底色；取色完成前禁止确认，旧响应不会覆盖新颜色。
+  Add automatic background sampling, page picking and custom fill; remove pixels/OCR before filling, wait for sampling before confirmation and ignore stale responses.
+- 增加工具栏“图片擦除 / 填底色”入口；验证彩色底图、四种旋转和导出图片中原像素已清除。
+  Add a direct image-erasure/fill toolbar entry; validate colored scans, rotations and removed source pixels in exported images.
+
 ## v0.5.0-rc.7 — 2026-10-01
 
 - 82 项回归通过，覆盖真实鼠标移动 / 缩放、取消、保存保护、连续擦除导出。 / 82 regressions pass, including mouse move/resize, cancellation, save guards and consecutive-erasure exports.

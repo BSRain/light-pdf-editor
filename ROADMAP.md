@@ -3,7 +3,7 @@
 > 自用 / Personal use。以下是计划，不代表已实现；按实际使用反馈调整优先级，不预设发布日期。
 > Planned work, not released features. Priorities follow personal-use feedback; no release dates are promised.
 
-## 当前版本 / Current: v0.5.0-rc.7
+## 当前版本 / Current: v0.5.0-rc.8
 
 Qt 界面、独立 PDF 处理进程、可见区域分块渲染、原文基线与边缘吸附、字体样式取样、增删文字、字符 / 词段选择与删除预览、本次会话新增文字再次编辑、重叠框选择、删除后保留独立文字框、相邻文字保护、加粗、撤销 / 重做、拖放、加密文件保存。
 
@@ -23,7 +23,9 @@ Work proceeds in this order, with tests before each release. Versions identify w
 | 已发布 / Released | v0.4.2 自动恢复 / Recovery | 可选自动保存、未应用草稿恢复。 / Optional autosave and unapplied draft recovery. | 恢复不覆盖原稿；加密文档不明文保存密码或解密副本；失败不阻塞编辑。 / Preserve originals and encryption, never persist passwords; failure must not block editing. |
 | 3 | v0.5.0 Windows 交付 / Windows delivery | 便携 EXE、依赖打包、高 DPI / 多显示器适配、无 Python 环境验证。 / Portable EXE, bundled dependencies, high-DPI/multi-monitor support, clean-machine validation. | 无 Python 的 Windows 测试环境可打开、拖放、编辑、撤销并导出；提供安装包哈希与已知限制。 / Open/drop/edit/undo/export on Windows without Python; published package hashes and limitations. |
 
-## 本轮进展 / Current: v0.5.0-rc.7
+## 本轮进展 / Current: v0.5.0-rc.8
+
+- 已完成图片文字删除后的纯色背景填充：自动取样、页面取色、自选颜色。 / Completed solid background filling after raster-text removal, with automatic sampling, page picking and custom colors.
 
 - 已完成擦除范围预览、移动 / 调整大小、显式确认、取消与连续操作。 / Completed adjustable erasure preview, explicit confirmation, cancellation and consecutive operations.
 

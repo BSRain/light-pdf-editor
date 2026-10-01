@@ -4,6 +4,7 @@ import os
 import hashlib
 import math
 from functools import lru_cache
+from collections import Counter
 import pymupdf as fitz
 
 
@@ -99,8 +100,42 @@ def delete_text(page, visible_rect):
     page.apply_redactions(images=0, graphics=0, text=0)
 
 
-def erase_image_region(page, visible_rect):
-    """Blank actual image pixels and remove any OCR text in the selected area."""
+def sample_background(page, visible_rect=None, point=None):
+    """Sample rendered page colors, never the UI selection overlay."""
+    bounds = page.rect
+    if point is not None:
+        if len(point) != 2 or not all(math.isfinite(v) for v in point) or not bounds.contains(fitz.Point(point)):
+            raise ValueError('请在页面内选择底色。')
+        x, y = point
+        patches = [fitz.Rect(x-.5, y-.5, x+.5, y+.5) & bounds]
+    else:
+        area = fitz.Rect(visible_rect) & bounds
+        if area.is_empty or not all(math.isfinite(v) for v in area):
+            raise ValueError('请选择有效选区。')
+        patches = []
+        for f in (.1, .3, .5, .7, .9):
+            x, y = area.x0 + area.width*f, area.y0 + area.height*f
+            patches.extend([fitz.Rect(x-1,area.y0-3,x+1,area.y0-.5),
+                            fitz.Rect(x-1,area.y1+.5,x+1,area.y1+3),
+                            fitz.Rect(area.x0-3,y-1,area.x0-.5,y+1),
+                            fitz.Rect(area.x1+.5,y-1,area.x1+3,y+1)])
+    colors = Counter()
+    for patch in patches:
+        patch &= bounds
+        if patch.is_empty:
+            continue
+        pix = page.get_pixmap(matrix=fitz.Matrix(2,2), clip=patch, colorspace=fitz.csRGB, alpha=False, annots=False)
+        raw = pix.samples
+        colors.update(tuple(raw[i:i+3]) for i in range(0,len(raw),3))
+    if not colors:
+        raise ValueError('选区周围没有可取样的底色，请手动选择颜色。')
+    return [v/255 for v in colors.most_common(1)[0][0]]
+
+
+def erase_image_region(page, visible_rect, fill_color=(1,1,1)):
+    """Remove image pixels and OCR text, then fill with the chosen color."""
+    if len(fill_color) != 3 or not all(isinstance(v, (int,float)) and math.isfinite(v) and 0 <= v <= 1 for v in fill_color):
+        raise ValueError('请选择有效的填充底色。')
     visible = fitz.Rect(visible_rect)
     if not all(math.isfinite(v) for v in visible) or visible.is_empty:
         raise ValueError('请选择有效的图片区域。')
@@ -112,7 +147,7 @@ def erase_image_region(page, visible_rect):
         raise ValueError('本页有已有的涂黑标记，请先在原软件中处理这些标记。')
     if not any(fitz.Rect(info['bbox']).intersects(rect) for info in page.get_image_info()):
         raise ValueError('选区内没有图片，请使用文字删除工具。')
-    page.add_redact_annot(rect, fill=False, cross_out=False)
+    page.add_redact_annot(rect, fill=tuple(fill_color), cross_out=False)
     page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_PIXELS,
                           graphics=fitz.PDF_REDACT_LINE_ART_NONE,
                           text=fitz.PDF_REDACT_TEXT_REMOVE)

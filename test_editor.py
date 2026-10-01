@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 import pymupdf as fitz
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QMimeData, QUrl
-from PySide6.QtGui import QDragEnterEvent, QDropEvent, QWheelEvent
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QWheelEvent, QColor
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtTest import QTest
 from pdf_core import add_text, delete_text, windows_fonts, text_spans, text_characters
@@ -348,6 +348,38 @@ class QtTests(unittest.TestCase):
                 wheel()
                 self.assertNotEqual(value(), before)
 
+    def test_background_auto_pick_manual_and_stale_response(self):
+        from test_image_erase import scan_fixture
+        e=self.editor
+        path=Path(self.temp.name)/'background.pdf'
+        scan_fixture(path)
+        e.open_pdf(str(path))
+        self.wait(lambda:not e.busy and e.path==path)
+        e.mode.setCurrentIndex(e.mode.findData('erase_image'))
+        e.delete_selection(QRectF(150,150,30,30))
+        self.assertFalse(e.apply_button.isEnabled())
+        self.wait(lambda:e.erase_color_ready)
+        self.assertEqual(e.erase_color,(0,0,0))
+        self.assertFalse(e.dirty)
+        e.begin_background_pick()
+        point=e.view.mapFromScene(QPointF(20,20))
+        QTest.mouseClick(e.view.viewport(),Qt.MouseButton.LeftButton,pos=point)
+        self.wait(lambda:e.erase_color_ready)
+        self.assertFalse(e.erase_auto_color)
+        self.assertIsNotNone(e.erase_selection)
+        version=e.background_version
+        e.set_background_color(QColor('#e8dbaa'))
+        e.on_result(dict(request=dict(kind='sample_background',epoch=e.epoch,version=version),data=dict(color=[1,1,1])))
+        self.assertEqual(QColor.fromRgbF(*e.erase_color).name(),'#e8dbaa')
+        e.apply()
+        self.wait(lambda:not e.busy and e.erase_selection is None)
+        output=Path(self.temp.name)/'filled.pdf'
+        e.set_busy(True);e.client.command('save',path=str(output),epoch=e.epoch)
+        self.wait(lambda:not e.busy and output.exists())
+        with fitz.open(output) as doc:
+            self.assertTrue(all(abs(a-b)<=1 for a,b in zip(doc[0].get_pixmap().pixel(160,160),(232,219,170))))
+        e.undo();self.wait(lambda:not e.busy)
+
     def test_erase_preview_move_resize_cancel_and_mode_switch(self):
         e = self.editor
         e.mode.setCurrentIndex(e.mode.findData('erase_image'))
@@ -397,6 +429,7 @@ class QtTests(unittest.TestCase):
         e.open_pdf(str(path))
         self.wait(lambda:not e.busy and e.path==path)
         e.mode.setCurrentIndex(e.mode.findData('erase_image'))
+        e.set_background_color(QColor('white'))
         for rect in (QRectF(40,40,30,30),QRectF(140,140,30,30)):
             before=e.revision
             e.delete_selection(rect)
@@ -428,6 +461,7 @@ class QtTests(unittest.TestCase):
         e.open_pdf(str(path))
         self.wait(lambda: not e.busy and e.path == path)
         e.mode.setCurrentIndex(e.mode.findData('erase_image'))
+        e.set_background_color(QColor('white'))
         start = e.view.mapFromScene(QPointF(55,65))
         end = e.view.mapFromScene(QPointF(125,110))
         QTest.mousePress(e.view.viewport(), Qt.MouseButton.LeftButton, pos=start)

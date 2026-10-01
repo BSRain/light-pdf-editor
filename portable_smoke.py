@@ -6,6 +6,7 @@ import sys
 import time
 import traceback
 import pymupdf as fitz
+from PySide6.QtGui import QColor
 from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtWidgets import QApplication
 from pdf_core import windows_fonts
@@ -121,15 +122,18 @@ def run(editor, output):
         with fitz.open() as doc:
             page = doc.new_page(width=200, height=200)
             pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0,0,200,200), False)
-            pix.clear_with(0)
+            pix.set_rect(pix.irect, (232,219,170))
+            pix.set_rect(fitz.IRect(45,45,70,70), (0,0,0))
             page.insert_image(page.rect, pixmap=pix)
             doc.save(scan)
         editor.open_pdf(str(scan))
         wait(lambda: not editor.busy and editor.path == scan)
         editor.mode.setCurrentIndex(editor.mode.findData('erase_image'))
+        editor.use_auto_background()
         editor.delete_selection(QRectF(40,40,40,40))
         if editor.dirty or editor.erase_selection is None:
             raise AssertionError('Image selection edited before confirmation')
+        wait(lambda: editor.erase_color_ready)
         editor.apply()
         wait(lambda: not editor.busy)
         scan_output = output / 'scan-erased.pdf'
@@ -138,9 +142,9 @@ def run(editor, output):
         wait(lambda: not editor.busy and scan_output.exists())
         with fitz.open(scan_output) as doc:
             pix = doc[0].get_pixmap()
-            if pix.pixel(50,50) != (255,255,255) or pix.pixel(10,10) != (0,0,0):
+            if any(abs(a-b)>1 for a,b in zip(pix.pixel(50,50),(232,219,170))) or pix.pixel(10,10) != (232,219,170):
                 raise AssertionError('Image-region erasure did not preserve outside pixels')
-        report['checks'].append('scanned-image region erasure and export')
+        report['checks'].append('scanned-image erasure, automatic background fill and export')
         report['ok'] = True
     except Exception:
         report['ok'] = False
