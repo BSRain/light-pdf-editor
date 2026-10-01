@@ -3,6 +3,13 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.5.0-rc.6 — 2026-10-01
+
+- 新增“擦除图片区域”：拖框松开后清除当前页图片的相交像素及文字层，保留矢量线条；支持撤销、重做和加密导出。
+  Add image-region erasure: drag/release to blank intersecting pixels and remove text on the current page, preserving vectors; supports undo/redo and encrypted export.
+- 验证四种页面旋转、像素清除、OCR 删除、导出原图清理、共享图片其他页不变、加密工程及鼠标框选。
+  Validate four rotations, pixel/OCR removal, unused-original cleanup on export, shared-image page isolation, encrypted projects and mouse selection.
+
 ## v0.5.0-rc.5 — 2026-09-26
 
 - 74 项回归通过；便携包补齐性能原始记录。 / 74 regressions pass; include raw benchmark records in the portable source bundle.

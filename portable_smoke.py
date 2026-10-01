@@ -117,6 +117,27 @@ def run(editor, output):
                 raise AssertionError('Export lost encryption')
             if 'Encrypted' not in doc[0].get_text(): raise AssertionError('Encrypted export lost text')
         report['checks'].append('AES-256 open, edit and encrypted export')
+        scan = output / 'scan.pdf'
+        with fitz.open() as doc:
+            page = doc.new_page(width=200, height=200)
+            pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0,0,200,200), False)
+            pix.clear_with(0)
+            page.insert_image(page.rect, pixmap=pix)
+            doc.save(scan)
+        editor.open_pdf(str(scan))
+        wait(lambda: not editor.busy and editor.path == scan)
+        editor.mode.setCurrentIndex(editor.mode.findData('erase_image'))
+        editor.delete_selection(QRectF(40,40,40,40))
+        wait(lambda: not editor.busy)
+        scan_output = output / 'scan-erased.pdf'
+        editor.set_busy(True)
+        editor.client.command('save', path=str(scan_output), epoch=editor.epoch)
+        wait(lambda: not editor.busy and scan_output.exists())
+        with fitz.open(scan_output) as doc:
+            pix = doc[0].get_pixmap()
+            if pix.pixel(50,50) != (255,255,255) or pix.pixel(10,10) != (0,0,0):
+                raise AssertionError('Image-region erasure did not preserve outside pixels')
+        report['checks'].append('scanned-image region erasure and export')
         report['ok'] = True
     except Exception:
         report['ok'] = False

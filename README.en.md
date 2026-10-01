@@ -1,4 +1,4 @@
-# Light PDF Editor v0.5.0-rc.5 · Qt Edition · Personal Use
+# Light PDF Editor v0.5.0-rc.6 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -54,7 +54,7 @@ In small windows, Apply and Cancel remain fixed below the scrollable properties.
 - **精细删除** (Precise delete, recommended): click one character, double-click a token, or drag a box around character centers. Red highlighting is only a preview. Click **删除所选** or press Delete / Backspace with the page focused to apply; Esc cancels. Unselected character text and geometry are checked after removal, with rollback when separation is unsafe.
 - **框选删除** (Box delete): drag a rectangle to remove intersecting characters.
 - **点选删除** (Click delete): hover over original text to highlight the PDF text span in red, then click to remove that entire span. Use precise deletion for smaller regions.
-- Original-text deletion supports Ctrl+Z undo and preserves images and vector graphics. Scanned-image text is unsupported.
+- Original-text deletion supports Ctrl+Z undo and preserves images and vector graphics. Use Erase image region for scanned text.
 - Click a draft box to focus it, then press **Delete / Backspace** to discard that draft without changing the source document.
 - **Redo** uses Ctrl+Y or Ctrl+Shift+Z. A new edit after undo clears the redo branch. Undo and redo share a 20-step / 128 MB snapshot budget, retaining at least one snapshot. Large documents may retain fewer steps. Use Edit inserted text to modify and reposition text created in this session.
 - Save as exports a separate file and refuses to overwrite the opened original. Apply or cancel the pending draft first.
@@ -62,7 +62,7 @@ In small windows, Apply and Cancel remain fixed below the scrollable properties.
 
 ![Precise character deletion preview](ui_precision.png)
 
-Precise deletion operates on extractable PDF characters and leaves gaps in place. Fully overlapping characters must be selected together. Double-click selects whitespace/punctuation-delimited tokens, including apostrophes in contractions. Chinese selects contiguous character runs, without semantic segmentation. Scanned-image and outlined text are unsupported.
+Precise deletion operates on extractable PDF characters and leaves gaps in place. Fully overlapping characters must be selected together. Double-click selects whitespace/punctuation-delimited tokens, including apostrophes in contractions. Chinese selects contiguous character runs, without semantic segmentation. For scanned images use Erase image region; outlined text is outside precise text deletion.
 
 ## After a worker process exits
 
@@ -173,3 +173,9 @@ Only the last successful snapshot is recoverable; later changes may be lost. Inp
 **框内对齐** supports left, center and right alignment within each text box; centering works directly with table-cell placement. X always denotes the box's left edge, and clicks/drags position the box. Style sampling resets to left alignment instead of guessing the source paragraph's alignment.
 
 Alignment survives preview, re-editing, projects and recovery. Files containing the new alignment setting require v0.5.0-rc.3 or newer; older projects remain readable. Precise font metrics fix selection boxes displaced from SimSun and similar text on 180-degree pages.
+
+## Erase part of a scanned image
+
+Choose **擦除图片区域** (Erase image region) from the tool dropdown, drag over the scan and release. Overlapping image pixels turn white; OCR/extractable text in the area is removed too. Ctrl+Z undoes, Ctrl+Y redoes; Save As exports the result. OCR is not required.
+
+The image pixels are modified rather than covered with a white rectangle. Only the current page is changed; original images reused on other pages remain. Source files, previous exports/recovery copies and session undo history are not automatically deleted. Colored backgrounds become white in the selection; there is no background reconstruction. Vector lines and annotations are outside this tool's scope.

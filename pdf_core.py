@@ -99,6 +99,25 @@ def delete_text(page, visible_rect):
     page.apply_redactions(images=0, graphics=0, text=0)
 
 
+def erase_image_region(page, visible_rect):
+    """Blank actual image pixels and remove any OCR text in the selected area."""
+    visible = fitz.Rect(visible_rect)
+    if not all(math.isfinite(v) for v in visible) or visible.is_empty:
+        raise ValueError('请选择有效的图片区域。')
+    visible &= page.rect
+    if visible.is_empty:
+        raise ValueError('选区不在页面内。')
+    rect = visible * page.derotation_matrix
+    if any(a.type[0] == fitz.PDF_ANNOT_REDACT for a in (page.annots() or [])):
+        raise ValueError('本页有已有的涂黑标记，请先在原软件中处理这些标记。')
+    if not any(fitz.Rect(info['bbox']).intersects(rect) for info in page.get_image_info()):
+        raise ValueError('选区内没有图片，请使用文字删除工具。')
+    page.add_redact_annot(rect, fill=False, cross_out=False)
+    page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_PIXELS,
+                          graphics=fitz.PDF_REDACT_LINE_ART_NONE,
+                          text=fitz.PDF_REDACT_TEXT_REMOVE)
+
+
 def baseline_offset(fontfile, size, bold=False):
     if bold:
         fontfile = bold_font_path(fontfile) or fontfile

@@ -348,6 +348,25 @@ class QtTests(unittest.TestCase):
                 wheel()
                 self.assertNotEqual(value(), before)
 
+    def test_mouse_drag_erases_scanned_region_and_undo(self):
+        from test_image_erase import scan_fixture
+        e = self.editor
+        path = Path(self.temp.name) / 'scan.pdf'
+        scan_fixture(path)
+        e.open_pdf(str(path))
+        self.wait(lambda: not e.busy and e.path == path)
+        e.mode.setCurrentIndex(e.mode.findData('erase_image'))
+        start = e.view.mapFromScene(QPointF(55,65))
+        end = e.view.mapFromScene(QPointF(125,110))
+        QTest.mousePress(e.view.viewport(), Qt.MouseButton.LeftButton, pos=start)
+        QTest.mouseMove(e.view.viewport(), end)
+        QTest.mouseRelease(e.view.viewport(), Qt.MouseButton.LeftButton, pos=end)
+        self.wait(lambda: not e.busy and e.dirty)
+        self.assertNotIn('SECRET', ''.join(s['text'] for s in e.spans))
+        e.undo()
+        self.wait(lambda: not e.busy)
+        self.assertIn('SECRET', ''.join(s['text'] for s in e.spans))
+
     def test_small_window_keeps_apply_cancel_visible(self):
         e = self.editor
         e.setMinimumSize(600, 400)

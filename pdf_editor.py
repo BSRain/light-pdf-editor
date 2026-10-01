@@ -367,8 +367,8 @@ class PdfView(QGraphicsView):
                     x0, y0, x1, y1 = span['bbox']
                     self.editor.delete_selection(QRectF(x0, y0, x1 - x0, y1 - y0))
                 else:
-                    self.editor.statusBar().showMessage('此处没有可删除的文字；扫描件中的图片文字不支持直接删除。', 5000)
-            elif mode in ('delete', 'precise'):
+                    self.editor.statusBar().showMessage('此处没有可删除的文字；扫描件请切换“擦除图片区域”。', 5000)
+            elif mode in ('delete', 'precise', 'erase_image'):
                 self.selection_start = point
                 pen = QPen(QColor('#d83b01'), 1, Qt.PenStyle.DashLine)
                 pen.setCosmetic(True)
@@ -612,7 +612,7 @@ class Editor(QMainWindow):
         self.addToolBar(editing)
         editing.addWidget(QLabel('工具  '))
         self.mode = PropertyComboBox()
-        for label, value in [('添加文字', 'add'), ('表格单元格填字', 'cell'), ('编辑新增文字', 'edit'), ('精细删除（按字符）', 'precise'), ('框选删除', 'delete'), ('点选删除文字', 'erase'), ('取样原文样式', 'sample'), ('平移页面', 'pan')]:
+        for label, value in [('添加文字', 'add'), ('表格单元格填字', 'cell'), ('编辑新增文字', 'edit'), ('精细删除（按字符）', 'precise'), ('框选删除', 'delete'), ('擦除图片区域', 'erase_image'), ('点选删除文字', 'erase'), ('取样原文样式', 'sample'), ('平移页面', 'pan')]:
             self.mode.addItem(label, value)
         self.mode.currentIndexChanged.connect(self.mode_changed)
         editing.addWidget(self.mode)
@@ -864,7 +864,7 @@ class Editor(QMainWindow):
             else:
                 self.set_busy(False)
                 QMessageBox.warning(self, '操作未完成', response['error'])
-                if self.path and kind in ('insert', 'delete', 'delete_chars', 'undo', 'redo', 'open'):
+                if self.path and kind in ('insert', 'delete', 'delete_chars', 'erase_image', 'undo', 'redo', 'open'):
                     self.client.command('page', index=self.index, epoch=self.epoch)
             return
         data = response['data']
@@ -881,8 +881,8 @@ class Editor(QMainWindow):
             self.restore_object_draft(dict(id=pending['editing_id'], spec=pending['spec'], offset=pending['offset']) if pending else data['edit_object'])
             if pending:
                 self.statusBar().showMessage('已恢复重新编辑中的草稿；应用替换，Esc 保留原文字。', 10000)
-        elif kind in ('open', 'page', 'insert', 'delete', 'delete_chars', 'undo', 'redo', 'update_object', 'cancel_edit'):
-            retired_objects = kind in ('delete', 'delete_chars') and bool({o['id'] for o in self.objects} - {o['id'] for o in data.get('objects', [])})
+        elif kind in ('open', 'page', 'insert', 'delete', 'delete_chars', 'erase_image', 'undo', 'redo', 'update_object', 'cancel_edit'):
+            retired_objects = kind in ('delete', 'delete_chars', 'erase_image') and bool({o['id'] for o in self.objects} - {o['id'] for o in data.get('objects', [])})
             self.load_page(data, fit=kind in ('open', 'page'))
             if kind == 'open' and data.get('recovery'):
                 self.restore_recovery(data.get('recovery_draft'))
@@ -958,7 +958,7 @@ class Editor(QMainWindow):
         self.tile_timer.start()
         message = '滚轮缩放，中键平移；点击原文附近可吸附到同一基线。'
         if not self.spans:
-            message = '本页没有可提取文字（可能为扫描件）；可添加文字，但无法吸附或删除图片内文字。'
+            message = '本页没有可提取文字（可能为扫描件）；可添加文字，无法吸附，擦除请选“擦除图片区域”。'
         self.statusBar().showMessage(message)
 
     def update_title(self):
@@ -1026,7 +1026,7 @@ class Editor(QMainWindow):
     def mode_changed(self):
         self.view.clear_erase_hover()
         self.view.clear_character_selection()
-        if hasattr(self, 'text_input') and (self.editing_id is not None or self.mode.currentData() in ('delete', 'erase', 'precise', 'edit', 'cell')):
+        if hasattr(self, 'text_input') and (self.editing_id is not None or self.mode.currentData() in ('delete', 'erase', 'precise', 'edit', 'cell', 'erase_image')):
             self.cancel()
         self.draw_guides([])
         if self.mode.currentData() == 'cell':
@@ -1037,6 +1037,8 @@ class Editor(QMainWindow):
             self.statusBar().showMessage('精细删除：单击选字，双击选词段，拖动多选；预览后按 Delete 删除，Esc 取消。')
         elif self.mode.currentData() == 'erase':
             self.statusBar().showMessage('点选删除：红框标出将删除的文字段；点击删除，Ctrl+Z 撤销。')
+        elif self.mode.currentData() == 'erase_image':
+            self.statusBar().showMessage('擦除图片区域：拖框后松开，将图片选区变白并删除其中的文字层；Ctrl+Z 撤销。')
         elif self.mode.currentData() == 'delete':
             self.statusBar().showMessage('框选删除：拖动框选文字，松开后删除；Ctrl+Z 撤销。')
 
@@ -1276,7 +1278,8 @@ class Editor(QMainWindow):
             return
         self.epoch += 1
         self.set_busy(True)
-        self.client.command('delete', epoch=self.epoch, index=self.index,
+        kind = 'erase_image' if self.mode.currentData() == 'erase_image' else 'delete'
+        self.client.command(kind, epoch=self.epoch, index=self.index, revision=self.revision,
                             rect=[rect.left(), rect.top(), rect.right(), rect.bottom()])
 
     def delete_characters(self):
