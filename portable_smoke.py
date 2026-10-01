@@ -128,6 +128,9 @@ def run(editor, output):
         wait(lambda: not editor.busy and editor.path == scan)
         editor.mode.setCurrentIndex(editor.mode.findData('erase_image'))
         editor.delete_selection(QRectF(40,40,40,40))
+        if editor.dirty or editor.erase_selection is None:
+            raise AssertionError('Image selection edited before confirmation')
+        editor.apply()
         wait(lambda: not editor.busy)
         scan_output = output / 'scan-erased.pdf'
         editor.set_busy(True)

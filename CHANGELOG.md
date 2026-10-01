@@ -3,6 +3,15 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.5.0-rc.7 — 2026-10-01
+
+- 82 项回归通过，覆盖真实鼠标移动 / 缩放、取消、保存保护、连续擦除导出。 / 82 regressions pass, including mouse move/resize, cancellation, save guards and consecutive-erasure exports.
+
+- 图片擦除改为范围预览：松开鼠标不修改 PDF，支持拖动、八个调整手柄和方向键微调；按钮 / Ctrl+Enter 确认，Esc 取消。
+  Image erasure now previews an adjustable region without editing on release; move, resize with eight handles or nudge, then confirm with the button/Ctrl+Enter or cancel with Esc.
+- 确认后继续框选，支持连续擦除、逐次撤销；待确认选区阻止保存 / 翻页，Ctrl+Z 优先取消当前选区。
+  Continue selecting after confirmation, with per-operation undo; pending regions block save/page changes and Ctrl+Z first cancels the pending region.
+
 ## v0.5.0-rc.6 — 2026-10-01
 
 - 新增“擦除图片区域”：拖框松开后清除当前页图片的相交像素及文字层，保留矢量线条；支持撤销、重做和加密导出。

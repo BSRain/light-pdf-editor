@@ -157,6 +157,8 @@ class Draft(QGraphicsObject):
         super().__init__()
         self.editor = editor
         self.w, self.h = width, height
+        self.snap_enabled = True
+        self.minimum_size = 12
         self.offset = editor.size.value() * 1.1
         self.pixmap = None
         self.valid = False
@@ -236,7 +238,7 @@ class Draft(QGraphicsObject):
         bounds = self.editor.page_rect
         if kind == 'move':
             x, y = x + delta.x(), y + delta.y()
-            if self.editor.snap.isChecked() and not event.modifiers() & Qt.KeyboardModifier.AltModifier:
+            if self.snap_enabled and self.editor.snap.isChecked() and not event.modifiers() & Qt.KeyboardModifier.AltModifier:
                 x, y, guides = snap_box(x, y, width, height, self.offset, self.editor.spans, 7 / self.editor.view.zoom)
                 self.editor.draw_guides(guides)
             else:
@@ -245,13 +247,13 @@ class Draft(QGraphicsObject):
             self.setPos(x, y)
         else:
             if 'w' in kind:
-                x = max(0, min(x + delta.x(), right - 12))
+                x = max(0, min(x + delta.x(), right - self.minimum_size))
             if 'e' in kind:
-                right = min(bounds.width(), max(x + 12, right + delta.x()))
+                right = min(bounds.width(), max(x + self.minimum_size, right + delta.x()))
             if 'n' in kind:
-                y = max(0, min(y + delta.y(), bottom - 12))
+                y = max(0, min(y + delta.y(), bottom - self.minimum_size))
             if 's' in kind:
-                bottom = min(bounds.height(), max(y + 12, bottom + delta.y()))
+                bottom = min(bounds.height(), max(y + self.minimum_size, bottom + delta.y()))
             self.setPos(x, y)
             self.resize_box(right - x, bottom - y)
         self.changed.emit(kind != 'move')
@@ -283,6 +285,38 @@ class Draft(QGraphicsObject):
             self.setPos(x, y)
             self.editor.draw_guides([])
             self.changed.emit(False)
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
+
+class EraseSelection(Draft):
+    """Adjustable region only; never edits the PDF until explicitly confirmed."""
+    def __init__(self, editor, width, height):
+        super().__init__(editor, width, height)
+        self.snap_enabled = False
+        self.minimum_size = 3
+
+    def paint(self, painter, option, widget=None):
+        pen = QPen(QColor('#d83b01'), 1, Qt.PenStyle.DashLine)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        painter.setBrush(QColor(216, 59, 1, 45))
+        painter.drawRect(QRectF(0, 0, self.w, self.h))
+        painter.setBrush(Qt.GlobalColor.white)
+        radius = 4 / self.editor.view.zoom
+        for x, y in self.handles().values():
+            painter.drawRect(QRectF(x-radius, y-radius, radius*2, radius*2))
+
+    def mouseDoubleClickEvent(self, event):
+        event.accept()
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.editor.confirm_image_erase()
+            event.accept()
+        elif event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            self.editor.cancel()
             event.accept()
         else:
             super().keyPressEvent(event)
@@ -347,7 +381,7 @@ class PdfView(QGraphicsView):
             event.accept()
             return
         point = self.mapToScene(event.position().toPoint())
-        draft = self.editor.draft
+        draft = self.editor.draft or self.editor.erase_selection
         if event.button() == Qt.MouseButton.LeftButton and draft and draft.hit(draft.mapFromScene(point)):
             super().mousePressEvent(event)
             return
@@ -532,6 +566,7 @@ class Editor(QMainWindow):
         self.can_redo = False
         self.page_rect = QRectF()
         self.draft = None
+        self.erase_selection = None
         self.guides = []
         self.color = (0.0, 0.0, 0.0)
         self.fonts = windows_fonts()
@@ -745,7 +780,9 @@ class Editor(QMainWindow):
         self.delete_chars_action.setEnabled(not value and bool(self.view.selected_chars))
         self.mode.setEnabled(not value)
         self.recovery_toggle.setEnabled(not value)
-        self.apply_button.setEnabled(not value and self.draft is not None and self.draft.valid)
+        self.apply_button.setEnabled(not value and (self.erase_selection is not None or self.draft is not None and self.draft.valid))
+        if self.erase_selection:
+            self.erase_selection.setEnabled(not value)
         if self.draft:
             self.draft.setEnabled(not value)
         for control in (self.text_input, self.font_combo, self.size, self.line_spacing, self.text_align, self.bold, *self.coords.values()):
@@ -755,8 +792,8 @@ class Editor(QMainWindow):
         if self.busy and not self.client.dead:
             self.statusBar().showMessage('正在处理文件，请稍后。', 5000)
             return False
-        if self.dirty or self.draft:
-            return QMessageBox.question(self, '未保存的修改', '是否放弃当前未保存的修改和文字预览？',
+        if self.dirty or self.draft or self.erase_selection:
+            return QMessageBox.question(self, '未保存的修改', '是否放弃当前未保存的修改和待确认预览？',
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes
         return True
 
@@ -1026,7 +1063,7 @@ class Editor(QMainWindow):
     def mode_changed(self):
         self.view.clear_erase_hover()
         self.view.clear_character_selection()
-        if hasattr(self, 'text_input') and (self.editing_id is not None or self.mode.currentData() in ('delete', 'erase', 'precise', 'edit', 'cell', 'erase_image')):
+        if hasattr(self, 'text_input') and (self.erase_selection is not None or self.editing_id is not None or self.mode.currentData() in ('delete', 'erase', 'precise', 'edit', 'cell', 'erase_image')):
             self.cancel()
         self.draw_guides([])
         if self.mode.currentData() == 'cell':
@@ -1038,7 +1075,7 @@ class Editor(QMainWindow):
         elif self.mode.currentData() == 'erase':
             self.statusBar().showMessage('点选删除：红框标出将删除的文字段；点击删除，Ctrl+Z 撤销。')
         elif self.mode.currentData() == 'erase_image':
-            self.statusBar().showMessage('擦除图片区域：拖框后松开，将图片选区变白并删除其中的文字层；Ctrl+Z 撤销。')
+            self.statusBar().showMessage('擦除图片区域：拖框预览，可移动 / 拉边角调整；点击“确认擦除”后才修改。Esc 取消。')
         elif self.mode.currentData() == 'delete':
             self.statusBar().showMessage('框选删除：拖动框选文字，松开后删除；Ctrl+Z 撤销。')
 
@@ -1239,6 +1276,9 @@ class Editor(QMainWindow):
     def cancel(self, local=False):
         if self.busy and not local:
             return
+        if self.erase_selection:
+            self.view.scene().removeItem(self.erase_selection)
+            self.erase_selection = None
         editing_id = self.editing_id
         self.editing_id = None
         self.view.clear_character_selection()
@@ -1253,14 +1293,20 @@ class Editor(QMainWindow):
             self.draft = None
         self.draw_guides([])
         self.apply_button.setEnabled(False)
+        self.preview_label.setToolTip('')
         self.preview_label.setText('点击页面放置文字；虚线是首行基线。')
-        self.apply_button.setText('应用文字  Ctrl+Enter')
+        self.apply_button.setText('确认擦除  Ctrl+Enter' if self.mode.currentData() == 'erase_image' else '应用文字  Ctrl+Enter')
+        if self.mode.currentData() == 'erase_image':
+            self.preview_label.setText('拖框预览擦除区域，调整后确认；尚未修改 PDF。')
         if editing_id is not None and not local:
             self.epoch += 1
             self.set_busy(True)
             self.client.command('cancel_edit', epoch=self.epoch, index=self.index)
 
     def apply(self):
+        if self.erase_selection is not None:
+            self.confirm_image_erase()
+            return
         if self.busy or not self.draft or not self.draft.valid:
             return
         spec = self.spec()
@@ -1276,11 +1322,45 @@ class Editor(QMainWindow):
     def delete_selection(self, rect):
         if self.busy:
             return
+        if self.mode.currentData() == 'erase_image':
+            self.preview_image_erase(rect)
+            return
         self.epoch += 1
         self.set_busy(True)
-        kind = 'erase_image' if self.mode.currentData() == 'erase_image' else 'delete'
-        self.client.command(kind, epoch=self.epoch, index=self.index, revision=self.revision,
+        self.client.command('delete', epoch=self.epoch, index=self.index, revision=self.revision,
                             rect=[rect.left(), rect.top(), rect.right(), rect.bottom()])
+
+    def preview_image_erase(self, rect):
+        rect = rect.normalized().intersected(self.page_rect)
+        if self.busy or not self.path or rect.width() <= 2 or rect.height() <= 2:
+            return
+        self.cancel()
+        self.erase_selection = EraseSelection(self, rect.width(), rect.height())
+        self.erase_selection.setPos(rect.topLeft())
+        self.view.scene().addItem(self.erase_selection)
+        self.erase_selection.changed.connect(self.update_erase_preview)
+        self.erase_selection.setFocus()
+        self.update_erase_preview()
+
+    def update_erase_preview(self, *_):
+        box = self.erase_selection
+        if box is None:
+            return
+        self.apply_button.setText('确认擦除  Ctrl+Enter')
+        self.apply_button.setEnabled(not self.busy)
+        self.preview_label.setText(f'待擦除：X {box.x():.1f}，Y {box.y():.1f}，{box.w:.1f} × {box.h:.1f} pt。拖动 / 调整边角后确认。')
+        self.preview_label.setToolTip('红色选区仅为范围预览；确认后图片像素变白，选区内文字层也将删除。Esc 取消。')
+
+    def confirm_image_erase(self):
+        box = self.erase_selection
+        if self.busy or box is None or self.mode.currentData() != 'erase_image':
+            return
+        rect = [box.x(), box.y(), box.x()+box.w, box.y()+box.h]
+        self.epoch += 1
+        self.set_busy(True)
+        self.client.command('erase_image', epoch=self.epoch, index=self.index,
+                            revision=self.revision, rect=rect)
+        self.statusBar().showMessage('正在擦除选中图片区域…')
 
     def delete_characters(self):
         if self.busy or not self.path or not self.view.selected_chars:
@@ -1295,8 +1375,8 @@ class Editor(QMainWindow):
     def redo(self):
         if self.busy or not self.path or not self.can_redo:
             return
-        if self.draft:
-            self.statusBar().showMessage('请先应用或取消文字预览，再重做。', 4000)
+        if self.draft or self.erase_selection:
+            self.statusBar().showMessage('请先应用或取消预览，再重做。', 4000)
             return
         self.epoch += 1
         self.set_busy(True)
@@ -1305,7 +1385,7 @@ class Editor(QMainWindow):
     def undo(self):
         if self.busy:
             return
-        if self.draft:
+        if self.draft or self.erase_selection:
             self.cancel()
         elif self.path:
             self.epoch += 1
@@ -1315,8 +1395,8 @@ class Editor(QMainWindow):
     def turn(self, delta):
         if self.busy or not self.path or not 0 <= self.index + delta < self.count:
             return
-        if self.draft:
-            QMessageBox.information(self, '文字尚未应用', '请先应用或取消文字预览。')
+        if self.draft or self.erase_selection:
+            QMessageBox.information(self, '预览尚未确认', '请先应用或取消预览。')
             return
         self.epoch += 1
         self.set_busy(True)
@@ -1406,8 +1486,8 @@ class Editor(QMainWindow):
     def save_project(self):
         if self.busy or not self.path:
             return
-        if self.draft:
-            self.statusBar().showMessage('请先应用或取消文字预览，再保存工程。', 5000)
+        if self.draft or self.erase_selection:
+            self.statusBar().showMessage('请先应用或取消预览，再保存工程。', 5000)
             return
         target, _ = QFileDialog.getSaveFileName(self, '保存编辑工程',
             str(self.path.with_name(self.path.stem + '_工程.lpdf')), '编辑工程 (*.lpdf)')
@@ -1421,8 +1501,8 @@ class Editor(QMainWindow):
     def save(self):
         if self.busy or not self.path:
             return
-        if self.draft:
-            QMessageBox.information(self, '文字尚未应用', '请先应用或取消文字预览，再保存。')
+        if self.draft or self.erase_selection:
+            QMessageBox.information(self, '预览尚未确认', '请先应用或取消预览，再保存。')
             return
         target, _ = QFileDialog.getSaveFileName(self, '另存为', str(self.path.with_name(self.path.stem + '_已修改.pdf')), 'PDF (*.pdf)')
         if target:

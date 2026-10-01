@@ -7,7 +7,7 @@ import time
 import unittest
 from unittest.mock import patch
 import pymupdf as fitz
-from PySide6.QtCore import QPoint, QPointF, Qt, QMimeData, QUrl
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QMimeData, QUrl
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QWheelEvent
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtTest import QTest
@@ -348,6 +348,78 @@ class QtTests(unittest.TestCase):
                 wheel()
                 self.assertNotEqual(value(), before)
 
+    def test_erase_preview_move_resize_cancel_and_mode_switch(self):
+        e = self.editor
+        e.mode.setCurrentIndex(e.mode.findData('erase_image'))
+        e.delete_selection(QRectF(80,100,100,70))
+        box = e.erase_selection
+        start = e.view.mapFromScene(box.mapToScene(QPointF(40,30)))
+        QTest.mousePress(e.view.viewport(), Qt.MouseButton.LeftButton, pos=start)
+        QTest.mouseMove(e.view.viewport(), start+QPoint(25,20), delay=20)
+        QTest.mouseRelease(e.view.viewport(), Qt.MouseButton.LeftButton, pos=start+QPoint(25,20))
+        self.assertGreater(box.x(),80)
+        self.assertGreater(box.y(),100)
+        corner=e.view.mapFromScene(box.mapToScene(QPointF(box.w,box.h)))
+        QTest.mousePress(e.view.viewport(), Qt.MouseButton.LeftButton, pos=corner)
+        QTest.mouseMove(e.view.viewport(), corner+QPoint(20,20), delay=20)
+        QTest.mouseRelease(e.view.viewport(), Qt.MouseButton.LeftButton, pos=corner+QPoint(20,20))
+        self.assertGreater(box.w,100)
+        self.assertGreater(box.h,70)
+        self.assertFalse(e.dirty)
+        revision=e.revision
+        QTest.keyClick(e.view.viewport(),Qt.Key.Key_Escape)
+        self.assertIsNone(e.erase_selection)
+        self.assertEqual(e.revision,revision)
+        e.delete_selection(QRectF(80,100,100,70))
+        e.mode.setCurrentIndex(e.mode.findData('add'))
+        self.assertIsNone(e.erase_selection)
+        self.assertFalse(e.dirty)
+
+    def test_erase_preview_blocks_save_and_undo_only_cancels_preview(self):
+        e=self.editor
+        e.mode.setCurrentIndex(e.mode.findData('erase_image'))
+        e.delete_selection(QRectF(80,100,100,70))
+        with patch('pdf_editor.QFileDialog.getSaveFileName') as dialog, patch.object(QMessageBox,'information'):
+            e.save()
+            e.save_project()
+            e.turn(1)
+            dialog.assert_not_called()
+        self.assertEqual(e.index,0)
+        e.undo()
+        self.assertIsNone(e.erase_selection)
+        self.assertFalse(e.dirty)
+
+    def test_consecutive_erase_confirmation_then_undo(self):
+        from test_image_erase import scan_fixture
+        e=self.editor
+        path=Path(self.temp.name)/'scan-repeat.pdf'
+        scan_fixture(path)
+        e.open_pdf(str(path))
+        self.wait(lambda:not e.busy and e.path==path)
+        e.mode.setCurrentIndex(e.mode.findData('erase_image'))
+        for rect in (QRectF(40,40,30,30),QRectF(140,140,30,30)):
+            before=e.revision
+            e.delete_selection(rect)
+            self.assertEqual(e.revision,before)
+            QTest.mouseClick(e.apply_button,Qt.MouseButton.LeftButton)
+            self.wait(lambda:not e.busy and e.erase_selection is None)
+            self.assertGreater(e.revision,before)
+            self.assertEqual(e.mode.currentData(),'erase_image')
+        output=Path(self.temp.name)/'erased.pdf'
+        e.set_busy(True)
+        e.client.command('save',path=str(output),epoch=e.epoch)
+        self.wait(lambda:not e.busy and output.exists())
+        with fitz.open(output) as doc:
+            pix=doc[0].get_pixmap()
+            self.assertEqual(pix.pixel(50,50),(255,255,255))
+            self.assertEqual(pix.pixel(150,150),(255,255,255))
+            self.assertEqual(pix.pixel(100,100),(0,0,0))
+        e.undo()
+        self.wait(lambda:not e.busy)
+        e.undo()
+        self.wait(lambda:not e.busy)
+        self.assertFalse(e.can_undo)
+
     def test_mouse_drag_erases_scanned_region_and_undo(self):
         from test_image_erase import scan_fixture
         e = self.editor
@@ -361,6 +433,11 @@ class QtTests(unittest.TestCase):
         QTest.mousePress(e.view.viewport(), Qt.MouseButton.LeftButton, pos=start)
         QTest.mouseMove(e.view.viewport(), end)
         QTest.mouseRelease(e.view.viewport(), Qt.MouseButton.LeftButton, pos=end)
+        self.assertFalse(e.busy)
+        self.assertFalse(e.dirty)
+        self.assertIsNotNone(e.erase_selection)
+        self.assertIn('SECRET', ''.join(s['text'] for s in e.spans))
+        e.apply()
         self.wait(lambda: not e.busy and e.dirty)
         self.assertNotIn('SECRET', ''.join(s['text'] for s in e.spans))
         e.undo()

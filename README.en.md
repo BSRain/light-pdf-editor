@@ -1,4 +1,4 @@
-# Light PDF Editor v0.5.0-rc.6 · Qt Edition · Personal Use
+# Light PDF Editor v0.5.0-rc.7 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -176,6 +176,10 @@ Alignment survives preview, re-editing, projects and recovery. Files containing 
 
 ## Erase part of a scanned image
 
-Choose **擦除图片区域** (Erase image region) from the tool dropdown, drag over the scan and release. Overlapping image pixels turn white; OCR/extractable text in the area is removed too. Ctrl+Z undoes, Ctrl+Y redoes; Save As exports the result. OCR is not required.
+Choose **擦除图片区域** (Erase image region) from the tool dropdown, drag over the scan and release to preview a red region without modifying the PDF. Drag inside to move, use the handles to resize, or nudge with arrows (Shift: 10 pt). Click Confirm erasure or press Ctrl+Enter to apply; Esc cancels. On confirmation, overlapping image pixels turn white; OCR/extractable text in the area is removed too. Ctrl+Z undoes, Ctrl+Y redoes; Save As exports the result. OCR is not required.
 
 The image pixels are modified rather than covered with a white rectangle. Only the current page is changed; original images reused on other pages remain. Source files, previous exports/recovery copies and session undo history are not automatically deleted. Colored backgrounds become white in the selection; there is no background reconstruction. Vector lines and annotations are outside this tool's scope.
+
+After confirmation, select the next area; each confirmed erasure is separately undoable. Pending regions block saving/page changes until confirmed or cancelled. Ctrl+Z first cancels the current region. Automatic recovery retains committed changes, not pending erasure regions.
+
+![Adjustable erasure region before confirmation](ui_erase_preview.png)
