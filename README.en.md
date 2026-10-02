@@ -1,4 +1,4 @@
-# Light PDF Editor v0.5.0-rc.8 · Qt Edition · Personal Use
+# Light PDF Editor v0.5.0-rc.9 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -189,3 +189,9 @@ After confirmation, select the next area; each confirmed erasure is separately u
 Use **图片擦除 / 填底色** on the toolbar and select raster text. Automatic background sampling uses nearby rendered colors. If needed, choose **页面取色** and click a clean background pixel, or click the color value to choose manually. Confirm erasure/fill, then Save As.
 
 Original pixels and overlapping OCR text are removed before the fill is drawn. Automatic sampling suits flat backgrounds; nearby lines/text/photos may require manual picking. Gradients and textures are not reconstructed. Source files, past exports and original images reused on other pages remain.
+
+## Startup troubleshooting
+
+Extract the complete portable ZIP; keep the main EXE, PdfWorker.exe and _internal together. The launcher diagnoses common missing components and recommends a fresh full extraction. Catchable startup failures produce local logs under `%LOCALAPPDATA%/LightPDFEditor/logs`, with a temporary-directory fallback; nothing is uploaded automatically. Logs may include local paths.
+
+OS/Python DLL failures before the launcher starts may still be reported by Windows or the packager. See [local acceptance scope](STABILITY.md); this candidate is unsigned.

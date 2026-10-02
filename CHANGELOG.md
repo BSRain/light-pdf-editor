@@ -3,6 +3,17 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.5.0-rc.9 — 2026-10-02
+
+- 89 项源码回归通过。 / 89 source regressions pass.
+
+- 增加独立启动入口，检查工作进程和 Windows 界面组件缺失；启动异常提供双语说明和本地诊断日志。
+  Add a launcher that detects missing worker/Windows UI components and reports startup exceptions with bilingual guidance and local logs.
+- 便携自检扩展为拖放事件、缩放锚点、实际工作进程崩溃及未应用草稿恢复；预期提示框核对后自动关闭，其他弹窗判为失败。
+  Extend packaged checks to drop events, pointer-anchored zoom, real worker crashes and draft recovery; verify/dismiss expected dialogs and fail on unexpected ones.
+- 增加缺失工作进程 / 平台插件的实际 EXE 故障注入。独立无 Python Windows 与物理多显示器验收尚未完成，继续以候选版交付。
+  Add actual-EXE missing-worker/platform-plugin fault injection. Clean Windows without Python and physical multi-monitor acceptance remain pending; this remains a candidate.
+
 ## v0.5.0-rc.8 — 2026-10-01
 
 - 85 项回归通过。 / 85 regressions pass.

@@ -1,6 +1,6 @@
 # Windows 便携版构建 / Portable Windows builds
 
-当前候选版：v0.5.0-rc.8。自用 / Personal use。
+当前候选版：v0.5.0-rc.9。自用 / Personal use。
 
 ## 使用 / Run
 
@@ -21,7 +21,7 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements-build.txt
 .venv\Scripts\python.exe -m unittest discover -q
 .venv\Scripts\python.exe build_windows.py
-.venv\Scripts\python.exe verify_portable.py releases\LightPDFEditor-0.5.0-rc.8-windows-x64.zip
+.venv\Scripts\python.exe verify_portable.py releases\LightPDFEditor-0.5.0-rc.9-windows-x64.zip
 ```
 
 构建脚本验证输出目录位于仓库内，再调用 PyInstaller；只替换 `dist/LightPDFEditor` 构建产物。ZIP 与 SHA-256 文件位于 `releases/`，不会加入 Git 源代码历史。版本代码使用 Git 标签管理，ZIP 作为对应 GitHub Release 附件。
@@ -42,3 +42,14 @@ The UI and PDF worker are separate windowless executables sharing bundled librar
 - [PyInstaller windowless standard I/O behavior](https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html)
 - [Microsoft GetStdHandle](https://learn.microsoft.com/en-us/windows/console/getstdhandle)
 - [Microsoft _open_osfhandle ownership](https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/open-osfhandle?view=msvc-170)
+
+## 本机稳定性矩阵 / Local stability matrix
+
+```powershell
+.venv\Scripts\python.exe verify_portable.py releases\LightPDFEditor-0.5.0-rc.9-windows-x64.zip --scale 1 --fault-checks
+.venv\Scripts\python.exe verify_portable.py releases\LightPDFEditor-0.5.0-rc.9-windows-x64.zip --scale 1.5
+.venv\Scripts\python.exe verify_portable.py releases\LightPDFEditor-0.5.0-rc.9-windows-x64.zip --scale 2
+```
+
+故障检查仅重命名验证器新解压目录中的两个组件，验证可读错误后恢复；不修改源程序包或用户文档。模拟缩放和 Qt 拖放事件不能替代跨物理显示器移动和资源管理器真实拖放验收。
+Fault checks temporarily rename two components only in the verifier's freshly extracted directory and restore them afterwards. Simulated scale/drop events do not replace physical monitor transitions or Explorer drag/drop acceptance.

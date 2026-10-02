@@ -6,9 +6,9 @@ import sys
 import time
 import traceback
 import pymupdf as fitz
-from PySide6.QtGui import QColor
-from PySide6.QtCore import QPointF, QRectF
-from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent
+from PySide6.QtCore import QPoint, QPointF, QRectF, QMimeData, QUrl, Qt, QTimer
+from PySide6.QtWidgets import QApplication, QMessageBox
 from pdf_core import windows_fonts
 from version import __version__
 
@@ -18,10 +18,27 @@ def run(editor, output):
     output.mkdir(parents=True, exist_ok=True)
     report = dict(version=__version__, frozen=bool(getattr(sys, 'frozen', False)),
                   executable=sys.executable, worker=editor.client.process.program(), checks=[])
+    expected_dialogs = []
+    unexpected_dialogs = []
+    expect_crash = False
+    def handle_test_dialogs():
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, QMessageBox) and widget.isVisible():
+                if expect_crash and widget.windowTitle() == 'PDF 处理进程已停止':
+                    expected_dialogs.append(widget.text())
+                else:
+                    unexpected_dialogs.append(widget.windowTitle() + ': ' + widget.text())
+                widget.done(QMessageBox.StandardButton.Ok)
+    dialog_timer = QTimer(editor)
+    dialog_timer.setInterval(30)
+    dialog_timer.timeout.connect(handle_test_dialogs)
+    dialog_timer.start()
     def wait(predicate):
         end = time.monotonic() + 30
         while time.monotonic() < end:
             QApplication.processEvents()
+            if unexpected_dialogs:
+                raise RuntimeError('Unexpected dialog: ' + unexpected_dialogs[-1])
             if editor.client.dead:
                 raise RuntimeError('Worker exited: ' + editor.client.stderr)
             if predicate():
@@ -35,7 +52,14 @@ def run(editor, output):
             page.insert_text((40, 60), 'Portable source')
             page.draw_rect(fitz.Rect(40, 100, 400, 260))
             doc.save(source)
-        editor.open_pdf(str(source))
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(source))])
+        enter = QDragEnterEvent(QPoint(100,100), Qt.DropAction.CopyAction, mime, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+        QApplication.sendEvent(editor.view.viewport(), enter)
+        drop = QDropEvent(QPointF(100,100), Qt.DropAction.CopyAction, mime, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+        QApplication.sendEvent(editor.view.viewport(), drop)
+        if not enter.isAccepted() or not drop.isAccepted():
+            raise AssertionError('PDF drop events were rejected')
         wait(lambda: editor.path == source and not editor.busy)
         available = editor.screen().availableGeometry()
         report['window'] = dict(width=editor.width(), height=editor.height(),
@@ -46,7 +70,18 @@ def run(editor, output):
         for button in (editor.apply_button, editor.cancel_button):
             if button.visibleRegion().boundingRect() != button.rect():
                 raise AssertionError('Apply/cancel controls are clipped')
-        report['checks'].append('open, render and visible apply/cancel controls')
+        report['checks'].append('PDF drop events, open, render and visible apply/cancel controls')
+        editor.view.set_zoom(2)
+        editor.view.centerOn(editor.page_rect.center())
+        QApplication.processEvents()
+        point = editor.view.viewport().rect().center()
+        before = editor.view.mapToScene(point)
+        editor.view.set_zoom(editor.view.zoom*1.2, point)
+        after = editor.view.mapToScene(point)
+        if (after-before).manhattanLength() > 3:
+            raise AssertionError('Zoom pointer position drifted')
+        editor.fit_page()
+        report['checks'].append('pointer-anchored zoom')
         editor.view.select_characters(QRectF(38, 45, 160, 20), QPointF())
         editor.delete_characters()
         wait(lambda: not editor.busy)
@@ -145,11 +180,40 @@ def run(editor, output):
             if any(abs(a-b)>1 for a,b in zip(pix.pixel(50,50),(232,219,170))) or pix.pixel(10,10) != (232,219,170):
                 raise AssertionError('Image-region erasure did not preserve outside pixels')
         report['checks'].append('scanned-image erasure, automatic background fill and export')
+        editor.mode.setCurrentIndex(editor.mode.findData('add'))
+        editor.text_input.setPlainText('Recovered draft')
+        editor.coords['width'].setValue(170)
+        editor.coords['height'].setValue(55)
+        editor.place(QPointF(10,140))
+        wait(lambda: editor.draft and editor.draft.valid)
+        editor.recovery_path = output / 'recovery.lpdf'
+        editor.recovery_toggle.blockSignals(True)
+        editor.recovery_toggle.setChecked(True)
+        editor.recovery_toggle.blockSignals(False)
+        editor.autosave()
+        wait(lambda: editor.recovery_path.exists() and not editor.recovery_pending)
+        recovery = editor.recovery_path
+        expect_crash = True
+        editor.client.process.kill()
+        wait_end = time.monotonic()+5
+        while not editor.client.dead and time.monotonic()<wait_end:
+            QApplication.processEvents(); time.sleep(.01)
+        if not editor.client.dead: raise AssertionError('Worker did not exit')
+        expect_crash = False
+        if len(expected_dialogs) != 1: raise AssertionError('Crash warning was not displayed exactly once')
+        editor.cancel(local=True)
+        editor.dirty = False
+        editor.open_pdf(str(recovery))
+        wait(lambda: not editor.busy and editor.draft and editor.draft.valid)
+        if editor.text_input.toPlainText() != 'Recovered draft':
+            raise AssertionError('Recovery lost unapplied draft')
+        report['checks'].append('worker crash and unapplied-draft recovery')
         report['ok'] = True
     except Exception:
         report['ok'] = False
         report['error'] = traceback.format_exc()
     finally:
+        dialog_timer.stop()
         editor.recovery_timer.stop()
         editor.preview_timer.stop()
         editor.tile_timer.stop()

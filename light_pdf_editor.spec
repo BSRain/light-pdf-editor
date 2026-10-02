@@ -11,7 +11,7 @@ info = VSVersionInfo(ffi=FixedFileInfo(filevers=core_version, prodvers=core_vers
         StringStruct('FileVersion', __version__), StringStruct('ProductName', 'Light PDF Editor'),
         StringStruct('ProductVersion', __version__)])]), VarFileInfo([VarStruct('Translation', [1033, 1200])])])
 
-gui = Analysis([str(root / 'pdf_editor.py')], pathex=[str(root)],
+gui = Analysis([str(root / 'app_entry.py')], pathex=[str(root)],
                binaries=[], datas=[], hiddenimports=[], hookspath=[], runtime_hooks=[], excludes=[])
 worker = Analysis([str(root / 'worker_entry.py')], pathex=[str(root)],
                   binaries=[], datas=[], hiddenimports=[], hookspath=[], runtime_hooks=[], excludes=['PySide6'])
