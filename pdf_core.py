@@ -185,6 +185,7 @@ def text_spans(page):
 def text_characters(page):
     """Stable per-page character IDs, in visible coordinates; no image extraction."""
     matrix = page.rotation_matrix
+    unrotated = matrix == fitz.Identity
     result = []
     flags = (fitz.TEXTFLAGS_RAWDICT & ~fitz.TEXT_PRESERVE_IMAGES) | fitz.TEXT_INHIBIT_SPACES | fitz.TEXT_ACCURATE_ASCENDERS
     line_id = 0
@@ -193,7 +194,7 @@ def text_characters(page):
             for span in line['spans']:
                 for char in span['chars']:
                     result.append(dict(id=len(result), text=char['c'],
-                                       bbox=list(fitz.Rect(char['bbox']) * matrix), line=line_id))
+                                       bbox=list(char['bbox']) if unrotated else list(fitz.Rect(char['bbox']) * matrix), line=line_id))
             line_id += 1
     return result
 

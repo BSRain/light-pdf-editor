@@ -25,3 +25,6 @@ See [build/matrix commands](BUILD_WINDOWS.md). Each run retains `结果/smoke-re
 
 v0.6.0-rc.1 继续使用上述本机矩阵，增加可见缩略图、页码往返和打开导航栏后的窗口边界检查。每个版本的实际结果随 Release 附带的 stability JSON 发布；v0.5 的外部设备验收仍待完成。
 v0.6.0-rc.1 extends the same local matrix with visible thumbnails, page-jump roundtrips and window bounds with navigation open. Actual results ship in the release stability JSON; external-device acceptance from v0.5 remains pending.
+
+v0.6.0-rc.2 额外检查删除后翻页再返回，防止命中旧缓存；源码回归覆盖字节预算、保存状态、回滚、加密换文档及四种旋转裁剪坐标。
+v0.6.0-rc.2 additionally revisits a page after deletion to detect stale cache results; source tests cover byte budgets, save state, rollback, encrypted document switches and four rotations with cropping.

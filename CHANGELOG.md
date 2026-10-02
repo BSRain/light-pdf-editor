@@ -3,6 +3,15 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.6.0-rc.2 — 2026-10-02
+
+- 103 项源码回归通过。 / 103 source regressions pass.
+
+- 页面内容使用最多 4 页、16 MiB 序列化数据的 LRU 缓存；超大页面不缓存。缓存不落盘，不保留文档对象；当前保存状态和撤销标记始终重新读取。 / Cache page content with a four-page, 16 MiB serialized-payload LRU; oversized entries bypass it. Cache stays in memory and holds no document objects; save/undo flags stay current.
+- 文档修改、撤销 / 重做、重新编辑、换文件和失败回滚使旧页面缓存失效。 / Invalidate old page content across mutations, undo/redo, re-editing, document changes and failed-operation rollback.
+- 未旋转页面跳过逐字符恒等坐标变换；保持旋转 / 裁剪页面字符位置一致。 / Skip per-character identity transforms on unrotated pages while preserving rotated/cropped geometry.
+- 增加同一生成用例的缓存前后响应数据和便携包删除后翻页检查。 / Add matched generated-fixture latency results and packaged post-deletion page-revisit checks.
+
 ## v0.6.0-rc.1 — 2026-10-02
 
 - 95 项源码回归通过。 / 95 source regressions pass.

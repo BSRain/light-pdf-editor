@@ -1,7 +1,7 @@
 """Isolated PDF owner. One JSON command/response per line over QProcess pipes."""
 import base64
 from copy import deepcopy
-from collections import Counter
+from collections import Counter, OrderedDict
 import hashlib
 import json
 import os
@@ -15,6 +15,9 @@ from pdf_core import sample_background, erase_image_region, add_text, delete_tex
 
 
 class Engine:
+    PAGE_CACHE_LIMIT = 16 * 1024 * 1024
+    PAGE_CACHE_COUNT = 4
+
     def __init__(self):
         self.doc = None
         self.path = None
@@ -29,15 +32,44 @@ class Engine:
         self.object_serial = 0
         self.edit_doc = None
         self.edit_id = None
+        self.page_cache = OrderedDict()
+        self.page_cache_bytes = 0
+        self.page_cache_identity = None
+
+    def clear_page_cache(self):
+        self.page_cache.clear()
+        self.page_cache_bytes = 0
+        self.page_cache_identity = None
 
     def metadata(self, index):
-        page = (self.edit_doc if self.edit_doc is not None else self.doc)[index]
-        scale = min(0.6, (700000 / (page.rect.width * page.rect.height)) ** 0.5)
-        pix = self.get_display(index).get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
-        return dict(path=str(self.path), index=index, count=len(self.doc), revision=self.revision,
-                    width=page.rect.width, height=page.rect.height, spans=text_spans(page), characters=text_characters(page), ruling_lines=ruling_lines(page),
+        # Only immutable page content is cached. Session state is rebuilt below.
+        identity = (self.revision, id(self.doc), id(self.edit_doc))
+        if identity != self.page_cache_identity:
+            self.clear_page_cache()
+            self.page_cache_identity = identity
+        cached = self.page_cache.pop(index, None)
+        if cached is not None:
+            self.page_cache[index] = cached
+            content = json.loads(cached)
+        else:
+            page = (self.edit_doc if self.edit_doc is not None else self.doc)[index]
+            scale = min(0.6, (700000 / (page.rect.width * page.rect.height)) ** 0.5)
+            pix = self.get_display(index).get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+            content = dict(width=page.rect.width, height=page.rect.height,
+                spans=text_spans(page), characters=text_characters(page), ruling_lines=[list(line) for line in ruling_lines(page)],
+                thumbnail=self.image(pix), scale=scale)
+            # Serialized bytes give an exact payload budget and isolated return values.
+            cached = json.dumps(content, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+            if len(cached) <= self.PAGE_CACHE_LIMIT and self.PAGE_CACHE_COUNT > 0:
+                while self.page_cache and (len(self.page_cache) >= self.PAGE_CACHE_COUNT or
+                        self.page_cache_bytes + len(cached) > self.PAGE_CACHE_LIMIT):
+                    _, removed = self.page_cache.popitem(last=False)
+                    self.page_cache_bytes -= len(removed)
+                self.page_cache[index] = cached
+                self.page_cache_bytes += len(cached)
+        return dict(content, path=str(self.path), index=index, count=len(self.doc), revision=self.revision,
                     objects=[deepcopy(o) for o in self.objects.values() if o['index'] == index],
-                    dirty=self.dirty, can_undo=bool(self.history), can_redo=bool(self.future), thumbnail=self.image(pix), scale=scale)
+                    dirty=self.dirty, can_undo=bool(self.history), can_redo=bool(self.future))
 
     @staticmethod
     def image(pix):
@@ -51,6 +83,7 @@ class Engine:
         return self.display
 
     def restore(self, data):
+        self.clear_page_cache()
         candidate = fitz.open(stream=data, filetype='pdf')
         if candidate.needs_pass and not candidate.authenticate(self.password):
             candidate.close()
@@ -68,6 +101,7 @@ class Engine:
         return candidate
 
     def end_edit(self):
+        self.clear_page_cache()
         if self.edit_doc is not None:
             self.edit_doc.close()
         self.edit_doc = None

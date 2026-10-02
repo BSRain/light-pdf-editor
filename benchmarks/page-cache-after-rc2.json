@@ -1,0 +1,149 @@
+{
+  "version": "0.6.0-rc.2",
+  "scope": "Real worker JSON request/response; excludes GUI painting. Cold means first metadata request after open, not OS cold cache.",
+  "cases": {
+    "many_pages": {
+      "fixture": {
+        "pages": 80,
+        "page_width_pt": 595,
+        "page_height_pt": 842,
+        "file_mb": 0.631
+      },
+      "working_pages": 4,
+      "open_ms": 372.3,
+      "first_visit": {
+        "samples": 3,
+        "p50_ms": 34.19,
+        "p95_ms": 34.65,
+        "raw_ms": [
+          34.65,
+          33.69,
+          34.19
+        ]
+      },
+      "revisit": {
+        "samples": 24,
+        "p50_ms": 16.58,
+        "p95_ms": 16.88,
+        "raw_ms": [
+          16.57,
+          17.79,
+          16.4,
+          16.53,
+          16.44,
+          16.11,
+          16.38,
+          16.56,
+          16.66,
+          16.84,
+          16.58,
+          16.67,
+          16.8,
+          16.39,
+          16.47,
+          16.79,
+          16.88,
+          16.24,
+          16.6,
+          16.31,
+          16.7,
+          16.6,
+          16.5,
+          16.63
+        ]
+      }
+    },
+    "large_page": {
+      "fixture": {
+        "pages": 1,
+        "page_width_pt": 2400,
+        "page_height_pt": 3200,
+        "file_mb": 0.031
+      },
+      "working_pages": 1,
+      "open_ms": 466.23,
+      "first_visit": null,
+      "revisit": {
+        "samples": 24,
+        "p50_ms": 65.29,
+        "p95_ms": 67.07,
+        "raw_ms": [
+          68.07,
+          64.4,
+          64.54,
+          64.22,
+          65.41,
+          65.17,
+          65.06,
+          64.89,
+          66.21,
+          65.91,
+          66.39,
+          66.14,
+          67.07,
+          65.61,
+          65.16,
+          64.28,
+          64.7,
+          64.82,
+          65.72,
+          64.69,
+          65.42,
+          64.89,
+          65.96,
+          66.15
+        ]
+      }
+    },
+    "large_images": {
+      "fixture": {
+        "pages": 3,
+        "page_width_pt": 595,
+        "page_height_pt": 842,
+        "file_mb": 30.936
+      },
+      "working_pages": 3,
+      "open_ms": 420.53,
+      "first_visit": {
+        "samples": 2,
+        "p50_ms": 82.45,
+        "p95_ms": 82.73,
+        "raw_ms": [
+          82.73,
+          82.17
+        ]
+      },
+      "revisit": {
+        "samples": 24,
+        "p50_ms": 21.17,
+        "p95_ms": 24.05,
+        "raw_ms": [
+          24.05,
+          21.03,
+          21.48,
+          21.0,
+          20.95,
+          20.77,
+          21.68,
+          20.77,
+          21.77,
+          20.92,
+          20.81,
+          20.56,
+          21.31,
+          21.35,
+          21.87,
+          20.43,
+          20.92,
+          21.44,
+          20.87,
+          21.59,
+          21.43,
+          20.61,
+          27.68,
+          21.84
+        ]
+      }
+    }
+  }
+}

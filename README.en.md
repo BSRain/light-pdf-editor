@@ -1,4 +1,4 @@
-# Light PDF Editor v0.6.0-rc.1 · Qt Edition · Personal Use
+# Light PDF Editor v0.6.0-rc.2 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -9,6 +9,8 @@ English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGE
 A Windows desktop PDF text editor with a Chinese interface. This version replaces the Tkinter implementation with **PySide6 / Qt and a separate PDF worker process**. Files are processed locally.
 
 Precise deletion now filters candidate glyphs spatially on dense pages; see [benchmark scope and measured results](BENCHMARKS.md).
+
+v0.6.0-rc.2 caches recently visited page content (up to 4 pages and 16 MiB of serialized payload), avoiding repeated extraction and preview generation. Edits invalidate cached content. See [measured scope and results](BENCHMARKS.md).
 
 ## v0.6 page navigation
 

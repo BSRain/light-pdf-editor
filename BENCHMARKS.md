@@ -68,3 +68,20 @@ Measured worker request-to-response latency through the JSON pipe, 12 samples pe
 
 缩略图队列优先级低于主页面分块，但已开始的单次渲染不能抢占；复杂页面仍可能延迟后续操作。当前内存中最多保留 20 张 130×170 边界内的缩略图；打开整个文档不会预先生成所有缩略图。
 Queued thumbnails have lower priority than main-view tiles, but an already active render is non-preemptible. Complex pages can still delay subsequent work. At most 20 thumbnails within 130×170 bounds are retained; document opening does not render every thumbnail.
+
+## v0.6.0-rc.2 页面缓存 / Page content cache
+
+2026-10-02，同一台机器、同一生成脚本和请求顺序，比较 rc.1 与 rc.2；每类循环重访 24 次。实际工作进程 JSON 管道请求到响应，不含界面绘制或之后的高清分块渲染。首次访问不等于系统冷缓存；单页用例测重复请求，不是跨页导航。原始记录：[优化前](benchmarks/page-cache-before-rc2.json)、[优化后](benchmarks/page-cache-after-rc2.json)。
+Same host, generated fixtures and request order; 24 revisits per case, rc.1 vs rc.2. Worker JSON request/response only, excluding UI painting and later high-resolution tiles. First visits are not OS cold-cache measurements; the single-page case measures repeated requests rather than navigation.
+
+| 用例 / Fixture | 优化前 P50 / P95 ms | 优化后 P50 / P95 ms | P50 降低 / reduction |
+| --- | --- | --- | --- |
+| 80 页文档中循环访问 4 页 / four-page working set | 42.40 / 45.47 | 16.58 / 16.88 | 60.9% |
+| 大尺寸文字页重复请求 / large text page | 160.54 / 174.73 | 65.29 / 67.07 | 59.3% |
+| 3 页图片文档 / three image pages | 61.21 / 70.33 | 21.17 / 24.05 | 65.4% |
+
+分析定位到逐字符坐标变换是大文字页的主要 CPU 热点；未旋转页面现在跳过恒等变换。缓存保存页面文字、坐标和低清预览，命中时避免再次提取 / 渲染。最多 4 页、16 MiB 序列化数据；这不是整个进程的内存上限，解析对象、显示列表、撤销历史仍占用其他内存。缓存仅存在内存中，编辑或切换文档后失效。
+Profiling identified per-character transforms as a major CPU cost; unrotated pages now skip identity transforms. Hits reuse text, geometry and low-resolution previews. The four-page/16 MiB limit covers serialized cache payload, not total process memory (parsed objects, display lists and undo history remain separate). Cache is memory-only and invalidates after edits/document changes.
+
+只宣称已测重访场景的改善；首次打开、超出容量连续翻页和高清渲染不保证同样收益。打开耗时的单次记录含进程启动，会有波动。复现：`python benchmark_page_cache.py --output result.json`；在相应版本运行同一脚本。
+Improvement claims apply to measured revisits only; first open, cache-thrashing sequential visits and high-resolution rendering may behave differently. One-shot open timings include process startup and fluctuate. Reproduce with the same script on each revision: `python benchmark_page_cache.py --output result.json`.
