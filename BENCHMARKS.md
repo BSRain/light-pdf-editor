@@ -54,3 +54,17 @@ A generated 60-row × 60-character Courier page deletes the first 10 glyphs per 
 原始记录 / Raw data: [deletion-rc5.json](benchmarks/deletion-rc5.json). 优化后测量发生在版本号更新前，记录明确标注工作区变体。The after measurement precedes the version bump and explicitly identifies the working-tree variant.
 
 复现 / Reproduce: `.venv\Scripts\python.exe benchmark_deletion.py --output tmp/deletion.json --runs 3`
+
+## v0.6.0-rc.1 页面导航基线 / Navigation baseline
+
+2026-10-02，本机实际工作进程 JSON 管道请求到响应，每类 12 次；仅生成 PDF。命令：`.venv\Scripts\python.exe benchmark_navigation.py`。原始数据见 [navigation-v0.6.0-rc.1.json](benchmarks/navigation-v0.6.0-rc.1.json)。
+Measured worker request-to-response latency through the JSON pipe, 12 samples per generated fixture. Excludes UI painting and is not a before/after optimization comparison. The single large page is repeatedly requested; it is not a multi-page turn test.
+
+| 用例 / Fixture | 页面响应 P50 / P95 ms | 缩略图 P50 / P95 ms |
+| --- | --- | --- |
+| 80 页 / pages | 37.34 / 40.90 | 2.77 / 4.00 |
+| 大尺寸文字页 / large text page | 145.87 / 165.78 | 7.88 / 9.74 |
+| 3 页图片，30.94 MB / image pages | 54.06 / 79.32 | 5.84 / 7.14 |
+
+缩略图队列优先级低于主页面分块，但已开始的单次渲染不能抢占；复杂页面仍可能延迟后续操作。当前内存中最多保留 20 张 130×170 边界内的缩略图；打开整个文档不会预先生成所有缩略图。
+Queued thumbnails have lower priority than main-view tiles, but an already active render is non-preemptible. Complex pages can still delay subsequent work. At most 20 thumbnails within 130×170 bounds are retained; document opening does not render every thumbnail.

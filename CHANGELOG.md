@@ -3,6 +3,15 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.6.0-rc.1 — 2026-10-02
+
+- 95 项源码回归通过。 / 95 source regressions pass.
+
+- 新增 Ctrl+G 页码跳转、可收起的缩略图导航；每组最多 20 页，只渲染可见缩略图。 / Add Ctrl+G page jumps and collapsible lazy thumbnails, bounded to 20 items per group.
+- 缩略图请求低于编辑、文字预览和页面分块优先级；不替换当前页显示列表缓存，过期结果不会写入新文档或新分组。 / Prioritize editing, text previews and tiles over thumbnails; preserve the active display cache and reject obsolete results.
+- 保留文字草稿 / 图片擦除预览的翻页保护，增加导航回归及便携包导航往返自检。 / Preserve pending-preview guards, add navigation regressions and packaged navigation checks.
+- 提供多页、大尺寸文字、图片文档的后台页面响应基准；不将其描述为完整界面延迟或优化幅度。 / Publish worker page-response baselines without claiming full UI latency or an unmeasured speedup.
+
 ## v0.5.0-rc.9 — 2026-10-02
 
 - 89 项源码回归通过。 / 89 source regressions pass.

@@ -3,7 +3,7 @@
 > 自用 / Personal use。以下是计划，不代表已实现；按实际使用反馈调整优先级，不预设发布日期。
 > Planned work, not released features. Priorities follow personal-use feedback; no release dates are promised.
 
-## 当前版本 / Current: v0.5.0-rc.9
+## 当前版本 / Current: v0.6.0-rc.1
 
 Qt 界面、独立 PDF 处理进程、可见区域分块渲染、原文基线与边缘吸附、字体样式取样、增删文字、字符 / 词段选择与删除预览、本次会话新增文字再次编辑、重叠框选择、删除后保留独立文字框、相邻文字保护、加粗、撤销 / 重做、拖放、加密文件保存。
 
@@ -23,7 +23,14 @@ Work proceeds in this order, with tests before each release. Versions identify w
 | 已发布 / Released | v0.4.2 自动恢复 / Recovery | 可选自动保存、未应用草稿恢复。 / Optional autosave and unapplied draft recovery. | 恢复不覆盖原稿；加密文档不明文保存密码或解密副本；失败不阻塞编辑。 / Preserve originals and encryption, never persist passwords; failure must not block editing. |
 | 3 | v0.5.0 Windows 交付 / Windows delivery | 便携 EXE、依赖打包、高 DPI / 多显示器适配、无 Python 环境验证。 / Portable EXE, bundled dependencies, high-DPI/multi-monitor support, clean-machine validation. | 无 Python 的 Windows 测试环境可打开、拖放、编辑、撤销并导出；提供安装包哈希与已知限制。 / Open/drop/edit/undo/export on Windows without Python; published package hashes and limitations. |
 
-## 本轮进展 / Current: v0.5.0-rc.9
+## v0.6 进展 / Progress
+
+- rc.1：页码跳转（Ctrl+G）、可收起的缩略图栏；每组最多 20 页，仅生成可见项，后台优先处理编辑 / 预览 / 主页面渲染。新增生成用例的页面响应基准。 / Page jump, collapsible lazy thumbnails in bounded groups, foreground work priority and generated page-response benchmarks.
+- 下一步 rc.2：分析大尺寸密集文字页的元数据提取热点，评估有容量上限的页面缓存；保留前后耗时及编辑 / 撤销后失效回归。 / Profile metadata extraction on dense large pages and evaluate a bounded cache, with before/after timing and edit/undo invalidation tests.
+- 随后 rc.3：测量连续缩放时的预览质量与延迟，再决定分块复用 / 请求合并调整。 / Measure preview quality and latency during continuous zoom before changing tile reuse/coalescing.
+- v0.5 的独立 Windows / 物理多屏验收继续保留，不阻塞已授权的 v0.6 开发；未因此宣称 v0.5 正式版已完成。 / Keep independent Windows/physical-monitor acceptance pending while proceeding with v0.6; v0.5 final acceptance is not claimed.
+
+## v0.5.0-rc.9 已完成 / Completed
 
 - 按用户选择先完成本机稳定性：启动诊断、损坏包检测、拖放 / 缩放 / 崩溃恢复验收；独立系统和物理多屏保持待办。 / Per user choice, prioritize local stability: startup diagnostics, damaged-bundle detection and drop/zoom/crash-recovery acceptance; independent OS and physical multi-monitor testing remain pending.
 

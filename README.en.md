@@ -1,4 +1,4 @@
-# Light PDF Editor v0.5.0-rc.9 · Qt Edition · Personal Use
+# Light PDF Editor v0.6.0-rc.1 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -9,6 +9,12 @@ English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGE
 A Windows desktop PDF text editor with a Chinese interface. This version replaces the Tkinter implementation with **PySide6 / Qt and a separate PDF worker process**. Files are processed locally.
 
 Precise deletion now filters candidate glyphs spatially on dense pages; see [benchmark scope and measured results](BENCHMARKS.md).
+
+## v0.6 page navigation
+
+Open “页面导航” in the toolbar and click a thumbnail to change pages. The panel holds up to 20 pages per group, with previous/next group buttons; only visible thumbnails are rendered. Enter a page number and click “跳转”, or use **Ctrl+G**. Apply or cancel pending text/erasure previews before changing pages.
+
+![Page navigation with lazy thumbnails](ui_navigation.png)
 
 ## Portable Windows release candidate
 

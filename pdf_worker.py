@@ -229,6 +229,14 @@ class Engine:
         if self.doc is None:
             raise ValueError('请先打开 PDF。')
         index = request.get('index', 0)
+        if kind == 'thumbnail':
+            if request.get('revision') != self.revision:
+                return {'stale': True}
+            # Committed document only; do not replace the active page display-list cache.
+            page = self.doc[index]
+            scale = min(130 / page.rect.width, 170 / page.rect.height)
+            pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+            return dict(image=self.image(pix))
         if kind == 'sample_background':
             if request.get('revision') != self.revision:
                 raise ValueError('页面已变化，请重新取色。')

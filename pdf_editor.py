@@ -7,12 +7,12 @@ from pathlib import Path
 import sys
 from datetime import datetime
 from uuid import uuid4
-from PySide6.QtCore import Qt, QObject, Signal, QProcess, QTimer, QPointF, QRectF
-from PySide6.QtGui import QAction, QColor, QPainter, QPen, QPixmap, QImage, QFont, QPainterPath
+from PySide6.QtCore import Qt, QObject, Signal, QProcess, QTimer, QPointF, QRectF, QSize, QEvent
+from PySide6.QtGui import QAction, QColor, QPainter, QPen, QPixmap, QImage, QFont, QPainterPath, QIcon
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QGraphicsView, QGraphicsScene,
     QGraphicsObject, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton, QToolBar, QComboBox,
     QDoubleSpinBox, QCheckBox, QPlainTextEdit, QDockWidget, QFileDialog, QMessageBox,
-    QColorDialog, QInputDialog, QLineEdit, QScrollArea, QStyleFactory)
+    QColorDialog, QInputDialog, QLineEdit, QScrollArea, QStyleFactory, QSpinBox, QListWidget, QListWidgetItem)
 from pdf_core import windows_fonts
 from alignment import snap_box, nearest_span, match_font, word_at, sample_line_spacing, containing_cell
 from version import __version__
@@ -47,6 +47,7 @@ class PdfClient(QObject):
         super().__init__(parent)
         self.commands = deque()
         self.preview = None
+        self.thumbnails = []
         self.tiles = []
         self.active = None
         self.serial = 0
@@ -77,6 +78,7 @@ class PdfClient(QObject):
             self.commands.clear()
             self.preview = None
             self.tiles = []
+            self.thumbnails = []
             self.active = None
             self.failed.emit(message)
 
@@ -84,6 +86,7 @@ class PdfClient(QObject):
         if self.dead or self.stopping:
             return
         self.tiles = []
+        self.thumbnails = []
         self.preview = None
         self.commands.append(dict(kind=kind, **fields))
         self.dispatch()
@@ -109,6 +112,8 @@ class PdfClient(QObject):
             request, self.preview = self.preview, None
         elif self.tiles:
             request = self.tiles.pop(0)
+        elif self.thumbnails:
+            request = self.thumbnails.pop(0)
         else:
             return
         self.serial += 1
@@ -614,6 +619,7 @@ class Editor(QMainWindow):
         self.recovery_timer.timeout.connect(self.autosave)
         self.build_toolbar()
         self.build_panel()
+        self.build_navigation()
         self.client = PdfClient(self)
         self.client.result.connect(self.on_result)
         self.client.failed.connect(self.worker_failed)
@@ -650,6 +656,7 @@ class Editor(QMainWindow):
         self.page_label = QLabel('  尚未打开  ')
         bar.addWidget(self.page_label)
         self.next_action = self.action(bar, '下一页', lambda: self.turn(1))
+        self.action(bar, '跳转页码', self.prompt_page, 'Ctrl+G')
         self.action(bar, '适合页面', self.fit_page, 'Ctrl+0')
         self.action(bar, '−', lambda: self.view.set_zoom(self.view.zoom / 1.2))
         self.zoom_label = QLabel('100%')
@@ -678,6 +685,131 @@ class Editor(QMainWindow):
         editing.addWidget(self.snap)
         editing.addSeparator()
         self.view.setToolTip('滚轮缩放 · 中键平移 · Shift+滚轮滚动')
+
+    def build_navigation(self):
+        self.thumbnail_identity = None
+        self.thumbnail_start = 0
+        self.thumbnail_generation = 0
+        self.thumbnail_timer = QTimer(self)
+        self.thumbnail_timer.setSingleShot(True)
+        self.thumbnail_timer.setInterval(160)
+        self.thumbnail_timer.timeout.connect(self.schedule_thumbnails)
+        self.pages_dock = QDockWidget('页面导航', self)
+        self.pages_dock.setMinimumWidth(170)
+        body = QWidget()
+        layout = QVBoxLayout(body)
+        row = QHBoxLayout()
+        self.page_input = QSpinBox()
+        self.page_input.setRange(1, 1)
+        self.page_input.setPrefix('第 ')
+        self.page_input.setSuffix(' 页')
+        go = QPushButton('跳转')
+        go.clicked.connect(lambda: self.go_to_page(self.page_input.value() - 1))
+        row.addWidget(self.page_input)
+        row.addWidget(go)
+        layout.addLayout(row)
+        self.page_list = QListWidget()
+        self.page_list.setIconSize(QSize(130, 170))
+        self.page_list.setUniformItemSizes(True)
+        self.page_list.viewport().installEventFilter(self)
+        self.page_list.itemClicked.connect(lambda item: self.go_to_page(item.data(Qt.ItemDataRole.UserRole)))
+        self.page_list.verticalScrollBar().valueChanged.connect(lambda _: self.thumbnail_timer.start())
+        layout.addWidget(self.page_list)
+        groups = QHBoxLayout()
+        self.previous_group = QPushButton('前 20 页')
+        self.next_group = QPushButton('后 20 页')
+        self.previous_group.clicked.connect(lambda: self.show_thumbnail_group(self.thumbnail_start - 20))
+        self.next_group.clicked.connect(lambda: self.show_thumbnail_group(self.thumbnail_start + 20))
+        groups.addWidget(self.previous_group)
+        groups.addWidget(self.next_group)
+        layout.addLayout(groups)
+        self.pages_dock.setWidget(body)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.pages_dock)
+        self.pages_dock.hide()
+        self.pages_dock.visibilityChanged.connect(self.navigation_visibility)
+        self.findChildren(QToolBar)[0].addAction(self.pages_dock.toggleViewAction())
+
+    def eventFilter(self, watched, event):
+        if hasattr(self, "page_list") and watched is self.page_list.viewport() and event.type() == QEvent.Type.Resize:
+            self.thumbnail_timer.start()
+        return super().eventFilter(watched, event)
+
+    def navigation_visibility(self, visible):
+        if visible:
+            self.thumbnail_timer.start()
+        elif hasattr(self, 'client'):
+            self.client.thumbnails = []
+
+    def prompt_page(self):
+        if self.busy or not self.path:
+            return
+        number, ok = QInputDialog.getInt(self, '跳转页码', f'页码（1–{self.count}）', self.index + 1, 1, self.count)
+        if ok:
+            self.go_to_page(number - 1)
+
+    def show_thumbnail_group(self, start):
+        if not self.count or not 0 <= start < self.count:
+            return
+        self.thumbnail_start = start // 20 * 20
+        self.thumbnail_generation += 1
+        self.client.thumbnails = []
+        self.page_list.clear()
+        for index in range(self.thumbnail_start, min(self.thumbnail_start + 20, self.count)):
+            item = QListWidgetItem(f'第 {index + 1} 页')
+            item.setData(Qt.ItemDataRole.UserRole, index)
+            item.setSizeHint(QSize(145, 185))
+            self.page_list.addItem(item)
+            if index == self.index:
+                self.page_list.setCurrentItem(item)
+        self.previous_group.setEnabled(self.thumbnail_start > 0)
+        self.next_group.setEnabled(self.thumbnail_start + 20 < self.count)
+        self.thumbnail_timer.start()
+
+    def refresh_navigation(self):
+        identity = (str(self.path), self.revision, self.count)
+        if identity != self.thumbnail_identity or not self.thumbnail_start <= self.index < self.thumbnail_start + 20:
+            self.thumbnail_identity = identity
+            self.show_thumbnail_group(self.index // 20 * 20)
+        self.page_input.setRange(1, max(1, self.count))
+        self.page_input.setValue(self.index + 1)
+        if self.page_list.count():
+            self.page_list.setCurrentRow(self.index - self.thumbnail_start)
+            self.page_list.scrollToItem(self.page_list.currentItem())
+        self.thumbnail_timer.start()
+
+    def schedule_thumbnails(self):
+        if not self.path or self.busy or not self.pages_dock.isVisible() or self.client.dead:
+            self.client.thumbnails = []
+            return
+        requests = []
+        for row in range(self.page_list.count()):
+            item = self.page_list.item(row)
+            if not item.icon().isNull() or item.data(Qt.ItemDataRole.UserRole + 1):
+                continue
+            if not self.page_list.visualItemRect(item).intersects(self.page_list.viewport().rect()):
+                continue
+            request = dict(kind='thumbnail', epoch=self.epoch, revision=self.revision,
+                           index=item.data(Qt.ItemDataRole.UserRole), generation=self.thumbnail_generation)
+            active = self.client.active
+            if not active or any(active.get(key) != value for key, value in request.items()):
+                requests.append(request)
+        self.client.thumbnails = requests
+        self.client.dispatch()
+
+    def receive_thumbnail(self, response):
+        request = response['request']
+        if request.get('generation') != self.thumbnail_generation or request.get('revision') != self.revision:
+            return
+        row = request['index'] - self.thumbnail_start
+        if not 0 <= row < self.page_list.count():
+            return
+        item = self.page_list.item(row)
+        if 'error' in response:
+            item.setToolTip('缩略图未能生成：' + response['error'])
+            item.setData(Qt.ItemDataRole.UserRole + 1, True)
+        elif not response['data'].get('stale'):
+            item.setIcon(QIcon(decode_pixmap(response['data']['image'])))
+        self.thumbnail_timer.start()
 
     def build_panel(self):
         dock = QDockWidget('文字属性', self)
@@ -806,6 +938,9 @@ class Editor(QMainWindow):
         self.undo_action.setEnabled(not value and self.can_undo)
         self.redo_action.setEnabled(not value and self.can_redo)
         self.delete_chars_action.setEnabled(not value and bool(self.view.selected_chars))
+        self.pages_dock.widget().setEnabled(not value and bool(self.path))
+        self.prev_action.setEnabled(not value and self.index > 0)
+        self.next_action.setEnabled(not value and self.index + 1 < self.count)
         self.mode.setEnabled(not value)
         self.background_controls.setEnabled(not value)
         self.recovery_toggle.setEnabled(not value)
@@ -881,6 +1016,10 @@ class Editor(QMainWindow):
         self.cache_bytes = 0
         self.can_undo = self.can_redo = self.dirty = False
         self.index = self.count = self.revision = 0
+        self.thumbnail_timer.stop()
+        self.thumbnail_generation += 1
+        self.thumbnail_identity = None
+        self.page_list.clear()
         self.client = PdfClient(self)
         self.client.result.connect(self.on_result)
         self.client.failed.connect(self.worker_failed)
@@ -912,7 +1051,11 @@ class Editor(QMainWindow):
             return
         if request.get('epoch') != self.epoch:
             return
+        if kind == 'thumbnail':
+            self.receive_thumbnail(response)
+            return
         if kind == 'open' and 'error' not in response and not response.get('data', {}).get('password_required'):
+            self.thumbnail_identity = None
             self.last_saved_path = None
             self.stop_recovery()
             self.pending_recovery_draft = None
@@ -1028,6 +1171,7 @@ class Editor(QMainWindow):
         thumbnail.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         scene.setSceneRect(self.page_rect.adjusted(-30, -30, 30, 30))
         self.page_label.setText(f'  {self.index + 1} / {self.count} 页  ')
+        self.refresh_navigation()
         self.set_busy(False)
         self.undo_action.setEnabled(data['can_undo'])
         self.update_title()
@@ -1501,14 +1645,19 @@ class Editor(QMainWindow):
             self.client.command('undo', epoch=self.epoch, index=self.index)
 
     def turn(self, delta):
-        if self.busy or not self.path or not 0 <= self.index + delta < self.count:
+        self.go_to_page(self.index + delta)
+
+    def go_to_page(self, index):
+        if self.busy or not self.path or not 0 <= index < self.count or index == self.index:
             return
         if self.draft or self.erase_selection:
+            self.page_input.setValue(self.index + 1)
+            self.page_list.setCurrentRow(self.index - self.thumbnail_start if self.thumbnail_start <= self.index < self.thumbnail_start + 20 else -1)
             QMessageBox.information(self, '预览尚未确认', '请先应用或取消预览。')
             return
         self.epoch += 1
         self.set_busy(True)
-        self.client.command('page', epoch=self.epoch, index=self.index + delta)
+        self.client.command('page', epoch=self.epoch, index=index)
 
     def stop_recovery(self):
         self.recovery_timer.stop()
@@ -1641,6 +1790,8 @@ class Editor(QMainWindow):
         self.recovery_timer.stop()
         self.preview_timer.stop()
         self.tile_timer.stop()
+        self.thumbnail_timer.stop()
+        self.background_timer.stop()
         self.client.close()
         event.accept()
 

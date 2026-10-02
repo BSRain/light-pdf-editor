@@ -1,0 +1,147 @@
+{
+  "version": "0.6.0-rc.1",
+  "scope": "Worker request through JSON pipe to response; excludes UI painting. Generated fixtures only; no before/after speedup claim.",
+  "cases": {
+    "many_pages": {
+      "fixture": {
+        "pages": 80,
+        "page_width_pt": 595,
+        "page_height_pt": 842,
+        "file_mb": 0.631
+      },
+      "open_ms": 382.54,
+      "page_response": {
+        "samples": 12,
+        "p50_ms": 37.34,
+        "p95_ms": 40.9,
+        "raw_ms": [
+          37.17,
+          37.37,
+          40.9,
+          38.94,
+          38.22,
+          37.13,
+          36.78,
+          37.31,
+          34.52,
+          35.41,
+          39.71,
+          38.03
+        ]
+      },
+      "thumbnail_response": {
+        "samples": 12,
+        "p50_ms": 2.77,
+        "p95_ms": 4.0,
+        "raw_ms": [
+          4.0,
+          2.65,
+          2.77,
+          3.06,
+          3.01,
+          2.63,
+          3.59,
+          2.7,
+          2.77,
+          2.76,
+          3.95,
+          2.75
+        ]
+      }
+    },
+    "large_page": {
+      "fixture": {
+        "pages": 1,
+        "page_width_pt": 2400,
+        "page_height_pt": 3200,
+        "file_mb": 0.031
+      },
+      "open_ms": 509.68,
+      "page_response": {
+        "samples": 12,
+        "p50_ms": 145.87,
+        "p95_ms": 165.78,
+        "raw_ms": [
+          146.88,
+          145.06,
+          165.78,
+          147.68,
+          153.03,
+          144.67,
+          138.93,
+          160.04,
+          141.55,
+          137.3,
+          144.03,
+          146.68
+        ]
+      },
+      "thumbnail_response": {
+        "samples": 12,
+        "p50_ms": 7.88,
+        "p95_ms": 9.74,
+        "raw_ms": [
+          9.74,
+          7.82,
+          7.8,
+          8.33,
+          7.8,
+          7.05,
+          8.13,
+          7.85,
+          8.0,
+          8.43,
+          7.47,
+          7.9
+        ]
+      }
+    },
+    "large_images": {
+      "fixture": {
+        "pages": 3,
+        "page_width_pt": 595,
+        "page_height_pt": 842,
+        "file_mb": 30.936
+      },
+      "open_ms": 421.86,
+      "page_response": {
+        "samples": 12,
+        "p50_ms": 54.06,
+        "p95_ms": 79.32,
+        "raw_ms": [
+          55.56,
+          77.39,
+          79.32,
+          52.97,
+          53.92,
+          52.34,
+          54.2,
+          58.01,
+          55.73,
+          52.82,
+          52.68,
+          52.42
+        ]
+      },
+      "thumbnail_response": {
+        "samples": 12,
+        "p50_ms": 5.84,
+        "p95_ms": 7.14,
+        "raw_ms": [
+          7.14,
+          6.31,
+          5.98,
+          5.45,
+          6.18,
+          5.77,
+          5.77,
+          6.35,
+          5.81,
+          5.63,
+          5.88,
+          5.7
+        ]
+      }
+    }
+  }
+}

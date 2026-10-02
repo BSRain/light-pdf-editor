@@ -20,3 +20,8 @@ Independent Windows without Python, real Explorer drag/drop and physical monitor
 
 参照 [构建与矩阵命令](BUILD_WINDOWS.md)。报告位于每次验证新建目录中的 `结果/smoke-report.json`，故障场景另有 `fault-*/smoke-report.json`。只使用生成 PDF，不需要真实工作文件。
 See [build/matrix commands](BUILD_WINDOWS.md). Each run retains `结果/smoke-report.json` and separate `fault-*/smoke-report.json` files, using generated PDFs only.
+
+## v0.6 继承验收 / Continued acceptance
+
+v0.6.0-rc.1 继续使用上述本机矩阵，增加可见缩略图、页码往返和打开导航栏后的窗口边界检查。每个版本的实际结果随 Release 附带的 stability JSON 发布；v0.5 的外部设备验收仍待完成。
+v0.6.0-rc.1 extends the same local matrix with visible thumbnails, page-jump roundtrips and window bounds with navigation open. Actual results ship in the release stability JSON; external-device acceptance from v0.5 remains pending.
