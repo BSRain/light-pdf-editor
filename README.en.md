@@ -1,4 +1,4 @@
-# Light PDF Editor v0.6.0-rc.2 · Qt Edition · Personal Use
+# Light PDF Editor v0.6.0-rc.3 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -10,7 +10,9 @@ A Windows desktop PDF text editor with a Chinese interface. This version replace
 
 Precise deletion now filters candidate glyphs spatially on dense pages; see [benchmark scope and measured results](BENCHMARKS.md).
 
-v0.6.0-rc.2 caches recently visited page content (up to 4 pages and 16 MiB of serialized payload), avoiding repeated extraction and preview generation. Edits invalidate cached content. See [measured scope and results](BENCHMARKS.md).
+Since v0.6.0-rc.2, the worker caches recently visited page content (up to 4 pages and 16 MiB of serialized payload), avoiding repeated extraction and preview generation. Edits invalidate cached content. See [measured scope and results](BENCHMARKS.md).
+
+v0.6.0-rc.3 clears old queued tiles immediately on zoom/pan and retains one previous sharp layer (up to 16 MiB) until the new tiles arrive. An already active render still has to finish.
 
 ## v0.6 page navigation
 

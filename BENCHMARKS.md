@@ -85,3 +85,20 @@ Profiling identified per-character transforms as a major CPU cost; unrotated pag
 
 只宣称已测重访场景的改善；首次打开、超出容量连续翻页和高清渲染不保证同样收益。打开耗时的单次记录含进程启动，会有波动。复现：`python benchmark_page_cache.py --output result.json`；在相应版本运行同一脚本。
 Improvement claims apply to measured revisits only; first open, cache-thrashing sequential visits and high-resolution rendering may behave differently. One-shot open timings include process startup and fluctuate. Reproduce with the same script on each revision: `python benchmark_page_cache.py --output result.json`.
+
+## v0.6.0-rc.3 连续缩放 / Continuous zoom
+
+2026-10-02：同一脚本在 rc.2 / rc.3 运行，生成文字、矢量、图片 PDF。每类一次三段缩放，段首显式提交分块，随后每 16 ms 调整比例，共 30 次；用于复现旧队列问题，不代表所有滚轮操作。记录真实 Qt / 工作进程响应。脚本：`python benchmark_zoom_queue.py --output result.json`。原始：[之前](benchmarks/zoom-before-rc3.json)、[之后](benchmarks/zoom-after-rc3.json)。
+Matched rc.2/rc.3 script, one three-part burst per generated fixture, explicit tile scheduling at each start followed by 30 total zoom changes spaced 16 ms apart. Reproduces queued-work behavior, not a general wheel benchmark. Actual Qt/worker responses; single runs are not statistical guarantees.
+
+| 用例 / Fixture | 过期比例响应数 前→后 | 缩放调用+事件处理 P50 ms 前→后 | 最后输入后停稳 ms 前→后 |
+| --- | --- | --- | --- |
+| text | 26 → 3 | 6.53 → 5.27 | 64.64 → 190.09 |
+| vector | 26 → 3 | 6.22 → 1.1 | 64.62 → 205.55 |
+| image | 26 → 3 | 5.88 → 0.94 | 66.74 → 235.54 |
+
+“过期”表示响应时比例已不匹配当前视图，不表示它以后不能被缓存复用。本例旧实现提前生成的分块恰好能在最终比例复用，因此停稳更快；新实现减少了交互期间的工作，但停稳后需要补绘更多分块。新实现保留上一层清晰预览直到补绘完成，避免期间直接退回低清底图。表中的事件耗时不等于高清 PDF 完整渲染延迟。
+An obsolete response has a scale mismatching the view at reply time; it may still be reusable later. Here the old implementation's speculative tiles happened to match the final scale, shortening settling. The new implementation does less work during interaction but renders more after stopping; it retains the previous sharp preview during that transition. Event timings are not full high-resolution PDF render latency.
+
+旧层最多一层、像素数据 16 MiB；这是对已有分块缓存之外持有的显示引用的约束，不是进程总内存上限。已有分块缓存仍为 64 MiB；正在执行的工作进程请求不能抢占。
+At most one fallback layer with 16 MiB of pixel data is retained; this bounds display references, not total process memory. Existing tile cache remains 64 MiB. Active worker requests are non-preemptible.

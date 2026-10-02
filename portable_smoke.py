@@ -83,6 +83,15 @@ def run(editor, output):
         wait(lambda: editor.index == 0 and not editor.busy)
         editor.pages_dock.hide()
         report['checks'].append('lazy thumbnails and page jump roundtrip')
+        wait(lambda: not editor.tile_timer.isActive() and editor.client.active is None and not editor.client.tiles)
+        editor.view.set_zoom(2.3)
+        editor.schedule_tiles()
+        if not editor.fallback_tiles:
+            raise AssertionError('Previous sharp preview was discarded during zoom')
+        wait(lambda: not editor.tile_timer.isActive() and editor.client.active is None and not editor.client.tiles)
+        if editor.fallback_tiles or not editor.wanted.issubset(editor.tile_items):
+            raise AssertionError('Zoom transition did not finish with current tiles')
+        report['checks'].append('bounded sharp-preview transition during zoom')
         editor.view.set_zoom(2)
         editor.view.centerOn(editor.page_rect.center())
         QApplication.processEvents()

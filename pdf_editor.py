@@ -552,6 +552,8 @@ class PdfView(QGraphicsView):
 
 
 class Editor(QMainWindow):
+    FALLBACK_TILE_LIMIT = 16 * 1024 * 1024
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f'轻简 PDF {__version__} · Qt 版 · 自用')
@@ -597,6 +599,7 @@ class Editor(QMainWindow):
         self.tile_cache = OrderedDict()
         self.cache_bytes = 0
         self.tile_items = {}
+        self.fallback_tiles = []
         self.wanted = set()
         self.tile_group = None
         self.view = PdfView(self)
@@ -609,7 +612,7 @@ class Editor(QMainWindow):
         self.preview_timer.setSingleShot(True)
         self.preview_timer.setInterval(100)
         self.preview_timer.timeout.connect(self.request_preview)
-        self.view.viewport_changed.connect(self.tile_timer.start)
+        self.view.viewport_changed.connect(self.viewport_updated)
         self.recovery_path = None
         self.recovery_pending = False
         self.recovery_stamp = None
@@ -1012,6 +1015,7 @@ class Editor(QMainWindow):
         self.ruling_lines = []
         self.tile_cache.clear()
         self.tile_items, self.wanted = {}, set()
+        self.fallback_tiles = []
         self.tile_group = None
         self.cache_bytes = 0
         self.can_undo = self.can_redo = self.dirty = False
@@ -1136,6 +1140,7 @@ class Editor(QMainWindow):
                 self.cache_bytes -= removed
             if key in self.wanted:
                 self.show_tile(key, pixmap, data)
+                self.finish_tile_transition()
         elif kind in ('save', 'save_project'):
             self.last_saved_path = Path(data['saved'])
             self.dirty = False
@@ -1160,6 +1165,7 @@ class Editor(QMainWindow):
         scene.clear()
         self.guides = []
         self.tile_items = {}
+        self.fallback_tiles = []
         self.wanted = set()
         self.tile_cache.clear()
         self.cache_bytes = 0
@@ -1186,6 +1192,22 @@ class Editor(QMainWindow):
     def update_title(self):
         self.setWindowTitle(f'{"* " if self.dirty else ""}{self.path.name if self.path else "轻简 PDF"} · {__version__} · Qt 版 · 自用')
 
+    def viewport_updated(self):
+        # A debounce must not keep dispatching queued work for the old viewport.
+        if hasattr(self, 'client'):
+            self.client.tiles = []
+        self.wanted = set()
+        self.tile_timer.start()
+
+    def clear_fallback_tiles(self):
+        for item in self.fallback_tiles:
+            self.view.scene().removeItem(item)
+        self.fallback_tiles = []
+
+    def finish_tile_transition(self):
+        if self.wanted and self.wanted.issubset(self.tile_items):
+            self.clear_fallback_tiles()
+
     def schedule_tiles(self):
         if not self.path or self.busy:
             return
@@ -1193,14 +1215,22 @@ class Editor(QMainWindow):
         scale = min(10, max(0.25, scale))
         group = (self.epoch, self.revision, self.index, scale)
         if group != self.tile_group:
+            # Keep at most one bounded previous layer until the new view is sharp.
+            cost = sum(item.pixmap().width() * item.pixmap().height() * 4 for item in self.tile_items.values())
+            retain = not self.fallback_tiles and cost <= self.FALLBACK_TILE_LIMIT
             for item in self.tile_items.values():
-                self.view.scene().removeItem(item)
+                if retain:
+                    item.setZValue(-0.5)
+                    self.fallback_tiles.append(item)
+                else:
+                    self.view.scene().removeItem(item)
             self.tile_items = {}
             self.tile_group = group
         visible = self.view.mapToScene(self.view.viewport().rect()).boundingRect().intersected(self.page_rect)
         if visible.isEmpty():
             self.wanted = set()
             self.client.replace_tiles([])
+            self.clear_fallback_tiles()
             return
         step = 512 / scale
         requests = []
@@ -1226,6 +1256,7 @@ class Editor(QMainWindow):
         center = visible.center()
         requests.sort(key=lambda r: (r['clip'][0] - center.x()) ** 2 + (r['clip'][1] - center.y()) ** 2)
         self.client.replace_tiles(requests)
+        self.finish_tile_transition()
 
     def show_tile(self, key, pixmap, data):
         if key in self.tile_items:

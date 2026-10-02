@@ -3,7 +3,7 @@
 > 自用 / Personal use。以下是计划，不代表已实现；按实际使用反馈调整优先级，不预设发布日期。
 > Planned work, not released features. Priorities follow personal-use feedback; no release dates are promised.
 
-## 当前版本 / Current: v0.6.0-rc.2
+## 当前版本 / Current: v0.6.0-rc.3
 
 Qt 界面、独立 PDF 处理进程、可见区域分块渲染、原文基线与边缘吸附、字体样式取样、增删文字、字符 / 词段选择与删除预览、本次会话新增文字再次编辑、重叠框选择、删除后保留独立文字框、相邻文字保护、加粗、撤销 / 重做、拖放、加密文件保存。
 
@@ -27,7 +27,8 @@ Work proceeds in this order, with tests before each release. Versions identify w
 
 - rc.1：页码跳转（Ctrl+G）、可收起的缩略图栏；每组最多 20 页，仅生成可见项，后台优先处理编辑 / 预览 / 主页面渲染。新增生成用例的页面响应基准。 / Page jump, collapsible lazy thumbnails in bounded groups, foreground work priority and generated page-response benchmarks.
 - rc.2：完成最多 4 页 / 16 MiB 序列化数据的页面缓存；未旋转页面避免逐字符恒等变换。覆盖编辑、撤销、保存状态、失败回滚、换文件与旋转裁剪的回归，并记录前后耗时。 / Completed a four-page/16 MiB serialized cache and identity-transform fast path, with mutation/state/rollback/document-switch/geometry regressions and before/after timings.
-- 下一步 rc.3：测量连续缩放时的预览质量与延迟，再决定分块复用 / 请求合并调整。 / Measure preview quality and latency during continuous zoom before changing tile reuse/coalescing.
+- rc.3：完成缩放 / 平移旧队列即时清理和有容量上限的清晰预览过渡；记录真实后台响应、界面事件耗时和停稳耗时的取舍。 / Completed immediate old-queue cleanup and bounded sharp-preview transitions; measured worker replies, UI event handling and settling tradeoffs.
+- 下一步正式版收尾：集中修复实际试用问题，核对文档和交付包；独立系统 / 物理多屏验收完成前继续标明验证边界。稳定试用后再考虑 GitHub Archive。 / Next: fix issues from actual use and finalize docs/package, preserving pending external acceptance limits; consider GitHub Archive after stable use.
 - v0.5 的独立 Windows / 物理多屏验收继续保留，不阻塞已授权的 v0.6 开发；未因此宣称 v0.5 正式版已完成。 / Keep independent Windows/physical-monitor acceptance pending while proceeding with v0.6; v0.5 final acceptance is not claimed.
 
 ## v0.5.0-rc.9 已完成 / Completed

@@ -3,6 +3,14 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.6.0-rc.3 — 2026-10-02
+
+- 107 项源码回归通过。 / 107 source regressions pass.
+
+- 缩放 / 平移时立即丢弃旧排队分块，80 ms 合并窗口内不再继续派发旧任务；不打断正在运行的单次渲染或文字预览。 / Immediately clear old queued tiles on zoom/pan rather than dispatching them during the 80 ms debounce; active rendering and text previews are not interrupted.
+- 新比例分块到齐前保留最多一层、16 MiB 的旧清晰预览；超限不保留，换页时清理。 / Retain one previous sharp layer up to 16 MiB until new tiles arrive; skip oversized layers and clear on page changes.
+- 增加缩放队列与显示过渡回归、实际 EXE 缩放过渡检查及前后测量。缓存预热减少可能使停稳时间增加；不宣称所有阶段都加速。 / Add queue/transition regressions, packaged checks and measurements. Less speculative cache warming can increase settling time; no claim of universal speedup.
+
 ## v0.6.0-rc.2 — 2026-10-02
 
 - 103 项源码回归通过。 / 103 source regressions pass.

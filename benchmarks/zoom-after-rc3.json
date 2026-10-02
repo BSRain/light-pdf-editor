@@ -1,0 +1,30 @@
+{
+  "version": "0.6.0-rc.3",
+  "scope": "Generated fixtures; Qt zoom calls and event processing, real worker tile replies. One burst per fixture, not a general latency guarantee.",
+  "cases": {
+    "text": {
+      "tile_replies": 10,
+      "obsolete_scale_replies": 3,
+      "zoom_event_p50_ms": 5.27,
+      "settle_ms": 190.09,
+      "visible_tiles": 8,
+      "cache_bytes": 12489720
+    },
+    "vector": {
+      "tile_replies": 10,
+      "obsolete_scale_replies": 3,
+      "zoom_event_p50_ms": 1.1,
+      "settle_ms": 205.55,
+      "visible_tiles": 8,
+      "cache_bytes": 12489720
+    },
+    "image": {
+      "tile_replies": 10,
+      "obsolete_scale_replies": 3,
+      "zoom_event_p50_ms": 0.94,
+      "settle_ms": 235.54,
+      "visible_tiles": 8,
+      "cache_bytes": 12489720
+    }
+  }
+}

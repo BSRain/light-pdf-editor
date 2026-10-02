@@ -28,3 +28,6 @@ v0.6.0-rc.1 extends the same local matrix with visible thumbnails, page-jump rou
 
 v0.6.0-rc.2 额外检查删除后翻页再返回，防止命中旧缓存；源码回归覆盖字节预算、保存状态、回滚、加密换文档及四种旋转裁剪坐标。
 v0.6.0-rc.2 additionally revisits a page after deletion to detect stale cache results; source tests cover byte budgets, save state, rollback, encrypted document switches and four rotations with cropping.
+
+v0.6.0-rc.3 在实际 EXE 中增加清晰预览过渡检查：新分块到齐前保留旧层，到齐后必须清理；继续执行三档模拟缩放和缺失组件检查。
+v0.6.0-rc.3 adds an actual-EXE sharp-preview transition check: retain the previous layer until new tiles arrive, then remove it; keep the three-scale and missing-component checks.
