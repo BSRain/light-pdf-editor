@@ -21,9 +21,15 @@ def run(editor, output):
     expected_dialogs = []
     unexpected_dialogs = []
     expect_crash = False
+    expect_restart = False
+    restart_dialogs = []
     def handle_test_dialogs():
         for widget in QApplication.topLevelWidgets():
             if isinstance(widget, QMessageBox) and widget.isVisible():
+                if expect_restart and widget.windowTitle() == '停止并重启处理进程':
+                    restart_dialogs.append(widget.text())
+                    widget.done(QMessageBox.StandardButton.Yes)
+                    continue
                 if expect_crash and widget.windowTitle() == 'PDF 处理进程已停止':
                     expected_dialogs.append(widget.text())
                 else:
@@ -72,6 +78,14 @@ def run(editor, output):
             if button.visibleRegion().boundingRect() != button.rect():
                 raise AssertionError('Apply/cancel controls are clipped')
         report['checks'].append('PDF drop events, open, render and visible apply/cancel controls')
+        previous_client = editor.client
+        expect_restart = True
+        editor.restart_worker()
+        expect_restart = False
+        wait(lambda: editor.client is not previous_client and editor.path == source and not editor.busy)
+        if len(restart_dialogs) != 1:
+            raise AssertionError('Manual restart did not show exactly one confirmation')
+        report['checks'].append('manual live-worker restart confirmation and reopen')
         editor.pages_dock.show()
         wait(lambda: not editor.page_list.item(0).icon().isNull())
         if editor.width() > available.width() or editor.height() > available.height():

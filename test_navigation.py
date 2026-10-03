@@ -118,7 +118,8 @@ class NavigationSchedulingTests(unittest.TestCase):
         process.state.return_value = QProcess.ProcessState.Running
         client = SimpleNamespace(stopping=False, dead=False, active=None, process=process,
             commands=deque([dict(kind='insert')]), preview=dict(kind='preview'),
-            tiles=[dict(kind='tile')], thumbnails=[dict(kind='thumbnail')], serial=0)
+            tiles=[dict(kind='tile')], thumbnails=[dict(kind='thumbnail')], serial=0, watchdog=Mock(),
+            MAX_FRAME_BYTES=64*1024*1024, timeout_for=lambda request: 1000)
         for kind in ('insert', 'preview', 'tile', 'thumbnail'):
             PdfClient.dispatch(client)
             self.assertEqual(client.active['kind'], kind)

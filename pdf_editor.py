@@ -1,5 +1,5 @@
 """Qt UI; PDF parsing, editing and rendering run in pdf_worker.py."""
-from collections import OrderedDict, deque
+from collections import OrderedDict
 import base64
 import json
 import math
@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 from datetime import datetime
 from uuid import uuid4
-from PySide6.QtCore import Qt, QObject, Signal, QProcess, QTimer, QPointF, QRectF, QSize, QEvent
+from PySide6.QtCore import Qt, Signal, QTimer, QPointF, QRectF, QSize, QEvent
 from PySide6.QtGui import QAction, QColor, QPainter, QPen, QPixmap, QImage, QFont, QPainterPath, QIcon
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QGraphicsView, QGraphicsScene,
     QGraphicsObject, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton, QToolBar, QComboBox,
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QGraphicsView
 from pdf_core import windows_fonts
 from alignment import snap_box, nearest_span, match_font, word_at, sample_line_spacing, containing_cell
 from version import __version__
+from pdf_client import PdfClient
 
 
 class FocusWheelMixin:
@@ -38,114 +39,6 @@ class PropertyComboBox(FocusWheelMixin, QComboBox):
 class PropertySpinBox(FocusWheelMixin, QDoubleSpinBox):
     pass
 
-
-class PdfClient(QObject):
-    result = Signal(dict)
-    failed = Signal(str)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.commands = deque()
-        self.preview = None
-        self.thumbnails = []
-        self.tiles = []
-        self.active = None
-        self.serial = 0
-        self.buffer = bytearray()
-        self.stopping = False
-        self.dead = False
-        self.stderr = ''
-        self.process = QProcess(self)
-        if getattr(sys, 'frozen', False):
-            self.process.setProgram(str(Path(sys.executable).with_name('PdfWorker.exe')))
-            self.process.setArguments([])
-        else:
-            self.process.setProgram(sys.executable)
-            self.process.setArguments(['-u', str(Path(__file__).with_name('worker_entry.py'))])
-        self.process.readyReadStandardOutput.connect(self.read)
-        self.process.readyReadStandardError.connect(self.read_error)
-        self.process.started.connect(self.dispatch)
-        self.process.errorOccurred.connect(lambda error: self.failure(self.process.errorString()))
-        self.process.finished.connect(lambda code, status: self.failure('PDF 处理进程已停止。'))
-        self.process.start()
-
-    def read_error(self):
-        self.stderr = (self.stderr + bytes(self.process.readAllStandardError()).decode('utf-8', 'replace'))[-4000:]
-
-    def failure(self, message):
-        if not self.stopping and not self.dead:
-            self.dead = True
-            self.commands.clear()
-            self.preview = None
-            self.tiles = []
-            self.thumbnails = []
-            self.active = None
-            self.failed.emit(message)
-
-    def command(self, kind, **fields):
-        if self.dead or self.stopping:
-            return
-        self.tiles = []
-        self.thumbnails = []
-        self.preview = None
-        self.commands.append(dict(kind=kind, **fields))
-        self.dispatch()
-
-    def request_preview(self, **fields):
-        if self.dead or self.stopping:
-            return
-        self.preview = dict(kind='preview', **fields)
-        self.dispatch()
-
-    def replace_tiles(self, requests):
-        if self.dead or self.stopping:
-            return
-        self.tiles = [r for r in requests if not self.active or r.get('key') != self.active.get('key')]
-        self.dispatch()
-
-    def dispatch(self):
-        if self.stopping or self.dead or self.active is not None or self.process.state() != QProcess.ProcessState.Running:
-            return
-        if self.commands:
-            request = self.commands.popleft()
-        elif self.preview is not None:
-            request, self.preview = self.preview, None
-        elif self.tiles:
-            request = self.tiles.pop(0)
-        elif self.thumbnails:
-            request = self.thumbnails.pop(0)
-        else:
-            return
-        self.serial += 1
-        request['id'] = self.serial
-        self.active = request
-        self.process.write((json.dumps(request, ensure_ascii=False) + '\n').encode('utf-8'))
-
-    def read(self):
-        self.buffer.extend(bytes(self.process.readAllStandardOutput()))
-        while b'\n' in self.buffer:
-            line, _, rest = self.buffer.partition(b'\n')
-            self.buffer = bytearray(rest)
-            try:
-                response = json.loads(line)
-            except ValueError:
-                self.failure('PDF 进程返回了无效数据。')
-                return
-            if not isinstance(response, dict) or not self.active or response.get('id') != self.active['id'] or not ('data' in response or 'error' in response):
-                self.failure('PDF 进程返回的数据与当前操作不匹配。')
-                return
-            request, self.active = self.active, None
-            if not self.stopping and request and response.get('id') == request['id']:
-                response['request'] = request
-                self.result.emit(response)
-            self.dispatch()
-
-    def close(self):
-        self.stopping = True
-        self.process.closeWriteChannel()
-        if not self.process.waitForFinished(400):
-            self.process.kill()
-            self.process.waitForFinished(1000)
 
 
 def decode_pixmap(data):
@@ -626,6 +519,7 @@ class Editor(QMainWindow):
         self.client = PdfClient(self)
         self.client.result.connect(self.on_result)
         self.client.failed.connect(self.worker_failed)
+        self.restart_action.setEnabled(True)
         self.statusBar().showMessage('拖入 PDF 开始。滚轮缩放，中键拖动平移；原文基线吸附已开启。')
         welcome = self.view.scene().addText('拖入 PDF，开始编辑\n\n原文基线吸附 · 样式取样 · 独立进程渲染')
         welcome.setDefaultTextColor(QColor('#526174'))
@@ -990,7 +884,7 @@ class Editor(QMainWindow):
         self.restart_action.setEnabled(True)
         self.text_input.setEnabled(True)
         self.text_input.setReadOnly(True)
-        note = message + '\n可点击“重启处理进程”重新打开最近另存的文件或原稿。未保存的修改无法恢复；右侧文字仍可复制。若已启用恢复副本，可打开最近一次成功保存的副本。'
+        note = message + '\n可点击“重启处理进程”重新打开最近另存的文件或原稿。未保存的修改无法恢复；右侧文字仍可复制。若已启用恢复副本，可打开最近一次成功保存的副本。保存请求可能已经写出，请另行核对输出文件。'
         self.statusBar().showMessage(note.replace('\n', ' '))
         QMessageBox.critical(self, 'PDF 处理进程已停止', note)
 
@@ -1027,16 +921,23 @@ class Editor(QMainWindow):
         self.client = PdfClient(self)
         self.client.result.connect(self.on_result)
         self.client.failed.connect(self.worker_failed)
+        self.restart_action.setEnabled(True)
         self.text_input.setReadOnly(False)
-        self.restart_action.setEnabled(False)
+        self.restart_action.setEnabled(True)
         self.set_busy(False)
         self.page_label.setText('  尚未打开  ')
         self.update_title()
 
     def restart_worker(self):
         if not self.client.dead:
-            return
-        if not self.discard():
+            answer = QMessageBox.question(self, '停止并重启处理进程',
+                '这会中断当前操作并放弃未保存修改和草稿。保存请求可能已经写出，请另行核对输出文件。\n'
+                '将重新打开最近另存的文件或原稿；也可取消后打开恢复副本。是否继续？',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            self.client.failure('用户手动停止并重启工作进程。', notify=False)
+        elif not self.discard():
             return
         target = self.last_saved_path or self.path
         self.reset_worker()

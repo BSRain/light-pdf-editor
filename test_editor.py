@@ -753,7 +753,7 @@ class QtTests(unittest.TestCase):
         self.wait(lambda: not e.busy and e.path == output)
         self.assertIsNot(e.client, old)
         self.assertFalse(e.client.dead)
-        self.assertFalse(e.restart_action.isEnabled())
+        self.assertTrue(e.restart_action.isEnabled())
         self.assertTrue(any('Aligned' in span['text'] for span in e.spans))
         self.assertFalse(e.objects)
         self.assertEqual(self.path.read_bytes(), original)
