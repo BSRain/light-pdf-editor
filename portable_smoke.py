@@ -28,7 +28,8 @@ def run(editor, output):
             if isinstance(widget, QMessageBox) and widget.isVisible():
                 if expect_restart and widget.windowTitle() == '停止并重启处理进程':
                     restart_dialogs.append(widget.text())
-                    widget.done(QMessageBox.StandardButton.Yes)
+                    # Click the button so static question() records the selected answer.
+                    widget.button(QMessageBox.StandardButton.Yes).click()
                     continue
                 if expect_crash and widget.windowTitle() == 'PDF 处理进程已停止':
                     expected_dialogs.append(widget.text())
