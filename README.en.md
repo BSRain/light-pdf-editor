@@ -1,4 +1,4 @@
-# Light PDF Editor v0.6.0 · Qt Edition · Personal Use
+# Light PDF Editor v0.6.1 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -80,8 +80,8 @@ Precise deletion operates on extractable PDF characters and leaves gaps in place
 
 - Editing stops; text in the side panel remains selectable for copying.
 - **重启处理进程** (Restart worker) reopens the latest successful export in this session, or the source if none exists. Open PDF can also select another file.
-- **Unsaved edits and session text-box records cannot be recovered**. Restart asks before discarding pending work; encrypted files require the password again.
-- Restart does not change the source or successfully saved files. Automatic draft recovery remains planned.
+- **Changes held only in memory without a successful recovery copy are not guaranteed recoverable**. Restart asks before discarding pending work; encrypted files require the password again.
+- The source is not overwritten. If saving was in progress, inspect the output after restarting. A successfully written recovery copy can restore the document and draft state it captured.
 
 ## Controls
 
@@ -127,7 +127,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe benchmark_workflows.py --runs 5
 ```
 
-69 tests cover worker exit, interrupted edits, restart confirmation/cancellation, reopening the last export, independent boxes surviving redaction, Chinese font/pixel preservation, overlapping-box selection/cancel, reselect/move/update/cancel, preservation of overlapping original text, continued editing after export, encrypted object replacement, double-click token selection, precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
+Regression tests cover worker exit, interrupted edits, restart confirmation/cancellation, reopening the last export, independent boxes surviving redaction, Chinese font/pixel preservation, overlapping-box selection/cancel, reselect/move/update/cancel, preservation of overlapping original text, continued editing after export, encrypted object replacement, double-click token selection, precise selection preview/cancel/commit, neighboring-character protection, cropped and rotated pages, multi-page undo/redo, retained redo after failed edits, actual text removal, graphic preservation, Chinese bold embedding, baseline/export agreement for four page rotations, encrypted undo/export, overflow rollback, tile bounds, Qt file-drop events, Qt mouse dragging/resizing, pointer-centered zoom, style sampling, stale responses, and process isolation. Qt tests require an available desktop session. The physical File Explorer drag gesture is not automatically tested.
 
 | File | Purpose |
 | --- | --- |
@@ -207,3 +207,11 @@ Original pixels and overlapping OCR text are removed before the fill is drawn. A
 Extract the complete portable ZIP; keep the main EXE, PdfWorker.exe and _internal together. The launcher diagnoses common missing components and recommends a fresh full extraction. Catchable startup failures produce local logs under `%LOCALAPPDATA%/LightPDFEditor/logs`, with a temporary-directory fallback; nothing is uploaded automatically. Logs may include local paths.
 
 OS/Python DLL failures before the launcher starts may still be reported by Windows or the packager. See [local acceptance scope](STABILITY.md); this release is unsigned.
+
+## v0.6.1 recovery patch
+
+Worker startup is limited to 30 seconds; page/tile/preview requests to 120 seconds; open/edit/undo/save/recovery requests to 300 seconds. A timeout stops the worker and reports a local diagnostic log, allowing restart or recovery-file reopen. “重启处理进程” is available while busy: confirm to abandon unsaved changes, or cancel to keep waiting. A timeout does not imply file corruption or guarantee recovery of unsaved operations. A save might already have written its output; inspect it separately.
+
+Individual request/response frames are limited to 64 MiB; malformed JSON, wrong IDs and oversized replies stop the worker rather than being silently skipped. This is not a process-wide memory limit. Local `worker-` logs do not serialize request passwords/text; stderr may still contain paths or document details, so review before sharing. Unwritable diagnostics are reported without preventing recovery.
+
+Rectangle deletion now validates surviving character count, text and geometry, rolling back when it cannot preserve outside text safely. See CHANGELOG for the current test count.

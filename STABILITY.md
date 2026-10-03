@@ -1,7 +1,7 @@
 # 本机稳定性验收 / Local stability acceptance
 
-当前交付 v0.6.0 自用正式版，验收范围限于下面列出的本机环境；外部验收未因此标记通过。
-Current delivery: v0.6.0 for personal use, validated only in the local environment below; external acceptance is not claimed.
+当前交付 v0.6.1 自用修复版，验收范围限于下面列出的本机环境；外部验收未因此标记通过。
+Current delivery: v0.6.1 for personal use, validated only in the local environment below; external acceptance is not claimed.
 
 ## 范围 / Scope
 
@@ -31,3 +31,6 @@ v0.6.0-rc.2 additionally revisits a page after deletion to detect stale cache re
 
 v0.6.0-rc.3 在实际 EXE 中增加清晰预览过渡检查：新分块到齐前保留旧层，到齐后必须清理；继续执行三档模拟缩放和缺失组件检查。
 v0.6.0-rc.3 adds an actual-EXE sharp-preview transition check: retain the previous layer until new tiles arrive, then remove it; keep the three-scale and missing-component checks.
+
+v0.6.1 增加源码故障注入：真实挂起进程、超长通信输出、协议错配、日志写入失败、忙碌时确认 / 取消重启和矩形删除异常回滚。便携自检新增正常进程手动重启确认及文件重开。
+v0.6.1 adds source fault injection for hung workers, oversized output, protocol mismatch, log failures, busy restart confirmation/cancellation and unsafe rectangle rollback. Packaged checks additionally verify live-worker restart confirmation and reopening.

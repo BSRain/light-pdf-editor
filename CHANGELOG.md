@@ -3,6 +3,14 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.6.1 — 2026-10-03
+
+- 115 项源码回归通过，包含先失败后修复的挂起、超长响应与删除误伤复现。 / 115 source regressions pass, including previously failing hang, oversized-response and unintended-deletion reproductions.
+
+- 修复工作进程不返回时无法脱困：请求超时停止进程，忙碌时可确认手动重启；明确提醒未保存修改与保存结果的不确定性。 / Fix unresponsive-worker recovery with request deadlines and confirmed manual restart while busy; disclose unsaved-work and save-output uncertainty.
+- 通信移到独立模块，限制单帧 64 MiB，协议异常终止并提供本地日志；不记录请求密码 / 正文，stderr 仍需分享前检查。 / Extract transport, bound frames to 64 MiB and log protocol failures locally; exclude request passwords/text, while stderr needs review before sharing.
+- 矩形删除核对幸存字符，异常回滚；修正 README 过期测试数。 / Verify rectangle-deletion survivors and roll back on mismatch; remove stale README test counts.
+
 ## v0.6.0 — 2026-10-03
 
 - 最终 107 项源码回归通过。 / All 107 final source regressions pass.

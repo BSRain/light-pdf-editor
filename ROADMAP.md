@@ -3,7 +3,7 @@
 > 自用 / Personal use。以下是计划，不代表已实现；按实际使用反馈调整优先级，不预设发布日期。
 > Planned work, not released features. Priorities follow personal-use feedback; no release dates are promised.
 
-## 当前版本 / Current: v0.6.0 — 功能冻结 / Feature freeze
+## 当前版本 / Current: v0.6.1 — 功能冻结 / Feature freeze
 
 Qt 界面、独立 PDF 处理进程、可见区域分块渲染、原文基线与边缘吸附、字体样式取样、增删文字、字符 / 词段选择与删除预览、本次会话新增文字再次编辑、重叠框选择、删除后保留独立文字框、相邻文字保护、加粗、撤销 / 重做、拖放、加密文件保存。
 
@@ -22,6 +22,11 @@ Work proceeds in this order, with tests before each release. Versions identify w
 | 已发布 / Released | v0.4.1 编辑工程 / Editable projects | 独立快照和文字框往返；保留加密。 / Standalone snapshot and editable-box roundtrips with encryption. | 四种旋转、源文件移除、损坏拒绝、加密与界面往返已验证。 / Validated rotations, missing source, corruption rejection, encryption and UI roundtrip. |
 | 已发布 / Released | v0.4.2 自动恢复 / Recovery | 可选自动保存、未应用草稿恢复。 / Optional autosave and unapplied draft recovery. | 恢复不覆盖原稿；加密文档不明文保存密码或解密副本；失败不阻塞编辑。 / Preserve originals and encryption, never persist passwords; failure must not block editing. |
 | 3 | v0.5.0 Windows 交付 / Windows delivery | 便携 EXE、依赖打包、高 DPI / 多显示器适配、无 Python 环境验证。 / Portable EXE, bundled dependencies, high-DPI/multi-monitor support, clean-machine validation. | 无 Python 的 Windows 测试环境可打开、拖放、编辑、撤销并导出；提供安装包哈希与已知限制。 / Open/drop/edit/undo/export on Windows without Python; published package hashes and limitations. |
+
+## v0.6.1 维护补丁 / Maintenance patch
+
+依据独立评估补上进程超时、手动脱困、有限通信帧、诊断日志和矩形删除核对；不扩展功能范围。
+Address review findings with deadlines, manual recovery, bounded frames, diagnostics and rectangle-deletion verification, without expanding feature scope.
 
 ## v0.6 进展 / Progress
 
