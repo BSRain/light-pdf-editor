@@ -1,7 +1,7 @@
-# v0.5.0 本机稳定性验收 / Local stability acceptance
+# 本机稳定性验收 / Local stability acceptance
 
-自用 / Personal use。当前交付 v0.5.0-rc.9；未标记正式版。
-Personal-use v0.5.0-rc.9; not the final release.
+当前交付 v0.6.0 自用正式版，验收范围限于下面列出的本机环境；外部验收未因此标记通过。
+Current delivery: v0.6.0 for personal use, validated only in the local environment below; external acceptance is not claimed.
 
 ## 范围 / Scope
 

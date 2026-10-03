@@ -68,8 +68,8 @@ def main():
         '完整解压后双击 LightPDFEditor.exe；保留 _internal 和 PdfWorker.exe。\n'
         'Extract the entire ZIP, then run LightPDFEditor.exe. Keep _internal and PdfWorker.exe beside it.\n'
         '使用说明和本版本源代码位于 source/。 / Documentation and matching source are in source/.\n'
-        '这是候选版；无 Python 的全新 Windows 环境及多显示器验证尚未完成。\n'
-        'Release candidate: clean Windows without Python and physical multi-monitor validation remain pending.\n', encoding='utf-8')
+        '验收范围：本机自用；无 Python 的全新 Windows 环境及物理多显示器尚未验证。\n'
+        'Validated for local personal use; clean Windows without Python and physical multi-monitor checks remain pending.\n', encoding='utf-8')
     release.mkdir(exist_ok=True)
     archive = release / f'LightPDFEditor-{__version__}-windows-x64.zip'
     with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as bundle:

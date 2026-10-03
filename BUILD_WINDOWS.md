@@ -1,6 +1,6 @@
 # Windows 便携版构建 / Portable Windows builds
 
-当前候选版：v0.6.0-rc.3。自用 / Personal use。
+当前版本：v0.6.0。本机自用范围正式交付 / Final delivery for locally validated personal use。
 
 ## 使用 / Run
 
@@ -8,7 +8,7 @@
 
 Download the Windows x64 ZIP from the GitHub release, extract everything and run `LightPDFEditor.exe`. Keep `PdfWorker.exe` and `_internal` beside it. Project Python dependencies are bundled. Matching source/documentation live in `source/`; dependency licenses live in `licenses/`.
 
-候选版尚未完成「未安装 Python 的全新 Windows」及物理多显示器验证。清空子进程 PATH 的本机测试不能代替干净机器测试。没有代码签名证书，软件包不宣称已经通过 SmartScreen 信誉验证。
+本版本尚未完成「未安装 Python 的全新 Windows」及物理多显示器验证。清空子进程 PATH 的本机测试不能代替干净机器测试。没有代码签名证书，软件包不宣称已经通过 SmartScreen 信誉验证。
 
 Clean Windows without Python and physical multi-monitor validation are pending. A local test with Python removed from the child PATH does not replace clean-machine testing. The package is not code-signed and does not claim SmartScreen reputation validation.
 
@@ -21,7 +21,7 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements-build.txt
 .venv\Scripts\python.exe -m unittest discover -q
 .venv\Scripts\python.exe build_windows.py
-.venv\Scripts\python.exe verify_portable.py releases\LightPDFEditor-0.6.0-rc.3-windows-x64.zip
+.venv\Scripts\python.exe verify_portable.py releases\LightPDFEditor-0.6.0-windows-x64.zip
 ```
 
 构建脚本验证输出目录位于仓库内，再调用 PyInstaller；只替换 `dist/LightPDFEditor` 构建产物。ZIP 与 SHA-256 文件位于 `releases/`，不会加入 Git 源代码历史。版本代码使用 Git 标签管理，ZIP 作为对应 GitHub Release 附件。
@@ -46,9 +46,9 @@ The UI and PDF worker are separate windowless executables sharing bundled librar
 ## 本机稳定性矩阵 / Local stability matrix
 
 ```powershell
-.venv\Scripts\python.exe verify_portable.py releases\LightPDFEditor-0.6.0-rc.3-windows-x64.zip --scale 1 --fault-checks
-.venv\Scripts\python.exe verify_portable.py releases\LightPDFEditor-0.6.0-rc.3-windows-x64.zip --scale 1.5
-.venv\Scripts\python.exe verify_portable.py releases\LightPDFEditor-0.6.0-rc.3-windows-x64.zip --scale 2
+.venv\Scripts\python.exe verify_portable.py releases\LightPDFEditor-0.6.0-windows-x64.zip --scale 1 --fault-checks
+.venv\Scripts\python.exe verify_portable.py releases\LightPDFEditor-0.6.0-windows-x64.zip --scale 1.5
+.venv\Scripts\python.exe verify_portable.py releases\LightPDFEditor-0.6.0-windows-x64.zip --scale 2
 ```
 
 故障检查仅重命名验证器新解压目录中的两个组件，验证可读错误后恢复；不修改源程序包或用户文档。模拟缩放和 Qt 拖放事件不能替代跨物理显示器移动和资源管理器真实拖放验收。

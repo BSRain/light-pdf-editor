@@ -1,4 +1,4 @@
-# 轻简 PDF v0.6.0-rc.3 · Qt 版 · 自用
+# 轻简 PDF v0.6.0 · Qt 版 · 自用
 
 [English](README.en.md) | 简体中文 | [版本计划](ROADMAP.md) | [更新日志](CHANGELOG.md)
 
@@ -20,9 +20,11 @@ v0.6.0-rc.3 在缩放 / 平移时立即清理旧的排队分块；保留最多 1
 
 ![页面导航与按需缩略图](ui_navigation.png)
 
-## Windows 便携候选版
+## Windows 自用正式版
 
-可在 [GitHub Releases](https://github.com/BSRain/light-pdf-editor/releases) 下载 Windows x64 ZIP，完整解压后运行 `LightPDFEditor.exe`。保留同目录下的 `PdfWorker.exe` 和 `_internal`。构建、校验和验证范围见 [便携版说明](BUILD_WINDOWS.md)。候选版尚未完成全新无 Python 系统及物理多显示器验证。
+可在 [GitHub Releases](https://github.com/BSRain/light-pdf-editor/releases) 下载 Windows x64 ZIP，完整解压后运行 `LightPDFEditor.exe`。保留同目录下的 `PdfWorker.exe` 和 `_internal`。构建、校验和验证范围见 [便携版说明](BUILD_WINDOWS.md)。本版本按本机自用范围完成交付；全新无 Python 系统及物理多显示器尚未验证。
+
+功能开发已冻结，后续只处理实际使用问题；仓库尚未归档。[快速使用与交付说明](HANDOFF.md)列出常用操作、已知限制和故障记录方式。
 
 ## 启动
 

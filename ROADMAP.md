@@ -3,13 +3,13 @@
 > 自用 / Personal use。以下是计划，不代表已实现；按实际使用反馈调整优先级，不预设发布日期。
 > Planned work, not released features. Priorities follow personal-use feedback; no release dates are promised.
 
-## 当前版本 / Current: v0.6.0-rc.3
+## 当前版本 / Current: v0.6.0 — 功能冻结 / Feature freeze
 
 Qt 界面、独立 PDF 处理进程、可见区域分块渲染、原文基线与边缘吸附、字体样式取样、增删文字、字符 / 词段选择与删除预览、本次会话新增文字再次编辑、重叠框选择、删除后保留独立文字框、相邻文字保护、加粗、撤销 / 重做、拖放、加密文件保存。
 
 Qt UI, isolated PDF worker, viewport tiles, baseline/edge snapping, style sampling, text insertion/deletion, character/token selection with deletion preview, session-created text re-editing, overlapping-box picker, independent boxes preserved across deletion, neighboring-text checks, bold, undo/redo, drag-and-drop, encrypted export.
 
-当前候选版补充了紧凑文字框高度判断、单字符宽度保护和模拟加粗修复；并已修正旋转文字选择框，新增框内居中 / 右对齐。 / The current candidate fixes compact text fitting, glyph-width overflow, synthetic bold and rotated selection geometry, and adds centered/right-aligned text boxes.
+本版本包含紧凑文字框高度判断、单字符宽度保护和模拟加粗修复；并已修正旋转文字选择框，新增框内居中 / 右对齐。 / This release fixes compact text fitting, glyph-width overflow, synthetic bold and rotated selection geometry, and adds centered/right-aligned text boxes.
 
 ## 分阶段计划 / Next versions
 
@@ -28,7 +28,7 @@ Work proceeds in this order, with tests before each release. Versions identify w
 - rc.1：页码跳转（Ctrl+G）、可收起的缩略图栏；每组最多 20 页，仅生成可见项，后台优先处理编辑 / 预览 / 主页面渲染。新增生成用例的页面响应基准。 / Page jump, collapsible lazy thumbnails in bounded groups, foreground work priority and generated page-response benchmarks.
 - rc.2：完成最多 4 页 / 16 MiB 序列化数据的页面缓存；未旋转页面避免逐字符恒等变换。覆盖编辑、撤销、保存状态、失败回滚、换文件与旋转裁剪的回归，并记录前后耗时。 / Completed a four-page/16 MiB serialized cache and identity-transform fast path, with mutation/state/rollback/document-switch/geometry regressions and before/after timings.
 - rc.3：完成缩放 / 平移旧队列即时清理和有容量上限的清晰预览过渡；记录真实后台响应、界面事件耗时和停稳耗时的取舍。 / Completed immediate old-queue cleanup and bounded sharp-preview transitions; measured worker replies, UI event handling and settling tradeoffs.
-- 下一步正式版收尾：集中修复实际试用问题，核对文档和交付包；独立系统 / 物理多屏验收完成前继续标明验证边界。稳定试用后再考虑 GitHub Archive。 / Next: fix issues from actual use and finalize docs/package, preserving pending external acceptance limits; consider GitHub Archive after stable use.
+- v0.6.0：按本机自用范围完成交付并冻结功能；未完成的外部验收保持明示。后续仅修复实际使用问题（如有则发布 0.6.x 补丁）。仓库保持可修改；稳定试用后再决定归档。 / Deliver v0.6.0 for locally validated personal use and freeze features; external acceptance remains explicitly pending. Only actual-use fixes follow as 0.6.x patches if needed. Keep the repository writable until a later archive decision.
 - v0.5 的独立 Windows / 物理多屏验收继续保留，不阻塞已授权的 v0.6 开发；未因此宣称 v0.5 正式版已完成。 / Keep independent Windows/physical-monitor acceptance pending while proceeding with v0.6; v0.5 final acceptance is not claimed.
 
 ## v0.5.0-rc.9 已完成 / Completed
@@ -72,14 +72,14 @@ Work proceeds in this order, with tests before each release. Versions identify w
 - 删除后保留不受影响的独立文字框，保留字体资源；相交或连锁重叠的框保守转为普通文字，撤销恢复。 / Preserve independent boxes and font resources after deletion; retire affected/overlapping clusters conservatively, with undo.
 - 回归覆盖中文像素一致性、精细删除字符编号重映射、四种旋转与加密导出。 / Regressions cover Chinese pixel preservation, precise-selection ID remapping, rotations and encrypted export.
 
-## 接下来的验收顺序 / Next acceptance steps
+## 收尾与维护 / Handoff and maintenance
 
-1. v0.5.0：在独立、未安装 Python 的 Windows 环境完成打开、拖放、中文编辑、删除 / 撤销、工程恢复和加密导出。当前环境的便携自检已通过，但不能替代该验收。
-   Validate opening/drop, Chinese edits, deletion/undo, recovery and encrypted export on independent Windows without Python; local packaged checks do not replace this gate.
-2. v0.5.0：物理显示器间移动窗口，检查不同缩放比例下的鼠标定位、清晰度和窗口边界；与上一项完成后再发布正式版。
-   Move between physical monitors at different scales and verify pointer coordinates, sharpness and window bounds before the final release.
-3. v0.6.0：扩展密集文字 / 图片大文件的响应时间报告，优先处理测量确认的翻页和预览热点；每项优化保留前后数据和准确性回归。
-   Expand dense-text/image-heavy latency reports and address measured page-turn/preview hotspots, with before/after data and correctness regressions.
+本机自用范围的 v0.6.0 交付不代表此前 v0.5 的独立系统 / 物理多屏目标已经验证；该范围区分见 [交付说明](HANDOFF.md)。不再按功能清单继续扩展版本。
+The locally validated v0.6.0 personal release does not imply completion of v0.5's external-system/physical-monitor goals; see [handoff](HANDOFF.md). No further feature expansion is planned.
+
+1. 实际工作试用：核对添加文字对齐、文字 / 图片擦除、撤销、保存后重开及工程恢复。真实文件不自动提交仓库。 / Trial actual workflows: alignment, text/image erasure, undo, saved-file reopen and project recovery; never automatically commit real work files.
+2. 有设备时再补：独立无 Python Windows、资源管理器真实拖放、不同 DPI 物理多屏。 / When hardware is available: independent Windows without Python, real Explorer drops and mixed-DPI physical monitors.
+3. 建议稳定使用 1～2 周，再由用户决定是否执行 GitHub Archive；本次收尾不归档。 / Suggest 1–2 weeks of stable use before the user's archive decision; this handoff does not archive the repository.
 
 ## 迭代方法 / Iteration process
 

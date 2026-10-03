@@ -1,4 +1,4 @@
-# Light PDF Editor v0.6.0-rc.3 · Qt Edition · Personal Use
+# Light PDF Editor v0.6.0 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -20,9 +20,11 @@ Open “页面导航” in the toolbar and click a thumbnail to change pages. Th
 
 ![Page navigation with lazy thumbnails](ui_navigation.png)
 
-## Portable Windows release candidate
+## Personal-use Windows release
 
 Download the Windows x64 ZIP from [GitHub Releases](https://github.com/BSRain/light-pdf-editor/releases), extract everything and run `LightPDFEditor.exe`. Keep `PdfWorker.exe` and `_internal` beside it. See [build and validation notes](BUILD_WINDOWS.md). Clean Windows without Python and physical multi-monitor validation remain pending.
+
+Feature development is frozen; follow-up work is limited to actual-use fixes. The repository is not archived. See [quick start and handoff](HANDOFF.md) for workflows, limits and issue reporting.
 
 ## Start
 
@@ -204,4 +206,4 @@ Original pixels and overlapping OCR text are removed before the fill is drawn. A
 
 Extract the complete portable ZIP; keep the main EXE, PdfWorker.exe and _internal together. The launcher diagnoses common missing components and recommends a fresh full extraction. Catchable startup failures produce local logs under `%LOCALAPPDATA%/LightPDFEditor/logs`, with a temporary-directory fallback; nothing is uploaded automatically. Logs may include local paths.
 
-OS/Python DLL failures before the launcher starts may still be reported by Windows or the packager. See [local acceptance scope](STABILITY.md); this candidate is unsigned.
+OS/Python DLL failures before the launcher starts may still be reported by Windows or the packager. See [local acceptance scope](STABILITY.md); this release is unsigned.

@@ -3,6 +3,14 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.6.0 — 2026-10-03
+
+- 最终 107 项源码回归通过。 / All 107 final source regressions pass.
+
+- 按已确认的本机自用范围完成正式交付，冻结功能开发；未完成的独立系统 / 物理多屏验收继续明确列出。 / Final personal-use delivery within the agreed local scope; freeze feature development and keep uncompleted external-system/monitor checks explicit.
+- 沿用 rc.3 编辑及渲染实现；更新版本标记、便携包说明、快速操作与故障记录指南。 / Retain rc.3 editing/rendering behavior; update version metadata, bundle wording, quick workflows and troubleshooting handoff.
+- 仓库保持可修改，不执行 Archive；后续只处理实际使用问题。 / Keep the repository writable, without Archive; follow up only on actual-use issues.
+
 ## v0.6.0-rc.3 — 2026-10-02
 
 - 107 项源码回归通过。 / 107 source regressions pass.
