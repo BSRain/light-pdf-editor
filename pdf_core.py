@@ -91,13 +91,13 @@ def delete_text(page, visible_rect):
     # Avoid applying any redactions already in the source document.
     if any(a.type[0] == fitz.PDF_ANNOT_REDACT for a in (page.annots() or [])):
         raise ValueError('本页有已有的涂黑标记，请先在原软件中处理这些标记。')
-    chars = [c for b in page.get_text('rawdict', flags=(fitz.TEXTFLAGS_RAWDICT & ~fitz.TEXT_PRESERVE_IMAGES) | fitz.TEXT_ACCURATE_ASCENDERS)['blocks'] if 'lines' in b
-             for line in b['lines'] for span in line['spans'] for c in span['chars']
-             if fitz.Rect(c['bbox']).intersects(rect)]
-    if not chars:
-        raise ValueError('选区内没有可删除的文字。扫描件中的文字是图片，暂不支持。')
+    chars = text_characters(page)
+    expected = [c for c in chars if not (fitz.Rect(c['bbox']) * page.derotation_matrix).intersects(rect)]
+    if len(expected) == len(chars):
+        raise ValueError('选区内没有可删除的文字。扫描件中的文字请使用图片擦除。')
     page.add_redact_annot(rect, fill=False, cross_out=False)
     page.apply_redactions(images=0, graphics=0, text=0)
+    verify_surviving_characters(page, expected)
 
 
 def sample_background(page, visible_rect=None, point=None):
@@ -275,6 +275,11 @@ def delete_characters(page, ids):
     page.apply_redactions(images=0, graphics=0, text=0)
     # Confirm geometry as well as text: identical letters elsewhere must survive.
     expected = [c for c in chars if c['id'] not in selected]
+    verify_surviving_characters(page, expected)
+
+
+def verify_surviving_characters(page, expected):
+    """Caller owns the transaction and restores the document on failure."""
     actual = text_characters(page)
     if len(expected) != len(actual) or any(
         a['text'] != b['text'] or any(abs(x - y) > 0.05 for x, y in zip(a['bbox'], b['bbox']))
