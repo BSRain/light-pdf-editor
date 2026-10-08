@@ -208,15 +208,23 @@ class Engine:
         if request.get('revision') != self.revision:
             raise ValueError('页面已变化，请重新识别。')
         rect = checked_rect(self.doc[index], request['rect'])
-        spec = request['spec']
-        validate_spec(self.doc[index], spec)
-        if len(spec['text']) > 20000:
+        specs = request.get('specs', [request.get('spec')])
+        if not isinstance(specs,list) or not 1 <= len(specs) <= 200:
+            raise ValueError('请保留 1 至 200 个文字框，过多时请分块转换。')
+        total = 0
+        for spec in specs:
+            if not isinstance(spec,dict):
+                raise ValueError('转换文字信息不完整。')
+            validate_spec(self.doc[index], spec)
+            total += len(spec['text'])
+            box = fitz.Rect(spec['x'], spec['y'], spec['x']+spec['width'], spec['y']+spec['height'])
+            if not rect.contains(box):
+                raise ValueError('转换文字必须位于原选区内。')
+        if total > 20000:
             raise ValueError('文字过多，请分块转换。')
-        box = fitz.Rect(spec['x'], spec['y'], spec['x']+spec['width'], spec['y']+spec['height'])
-        if not rect.contains(box):
-            raise ValueError('转换文字必须位于原选区内。')
         if any(o['index'] == index and fitz.Rect(o['bbox']).intersects(rect) for o in self.objects.values()):
             raise ValueError('选区与已有可编辑文字框重叠，请缩小范围。')
+        return specs
 
     def limit_history(self):
         # Shared undo/redo budget. A single oversize snapshot is retained.
@@ -319,10 +327,11 @@ class Engine:
             from ocr_core import snapshot
             if kind == 'ocr_snapshot':
                 return snapshot(self.doc[index], request['rect'])
-            self.validate_conversion(index, request)
+            specs = self.validate_conversion(index, request)
             with self.copy_document() as preview:
                 erase_image_region(preview[index], request['rect'], request['fill_color'])
-                add_text(preview[index], **request['spec'])
+                for spec in specs:
+                    add_text(preview[index], **spec)
                 rect = fitz.Rect(request['rect'])
                 scale = min(2, (2_000_000 / (rect.width * rect.height)) ** .5)
                 pix = preview[index].get_pixmap(matrix=fitz.Matrix(scale,scale), clip=rect, alpha=False)
@@ -349,9 +358,10 @@ class Engine:
                     self.remove_object(self.doc, obj)
                     self.insert_object(index, request['spec'], obj['id'])
                 elif kind == 'ocr_convert':
-                    self.validate_conversion(index, request)
+                    specs = self.validate_conversion(index, request)
                     self.delete_preserving_objects(index, rect=request['rect'], images=True, fill_color=request['fill_color'])
-                    self.insert_object(index, request['spec'])
+                    for spec in specs:
+                        self.insert_object(index, spec)
                 elif kind == 'erase_image':
                     if request.get('revision') != self.revision:
                         raise ValueError('页面已变化，请重新选择图片区域。')

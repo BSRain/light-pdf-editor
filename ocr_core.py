@@ -42,7 +42,7 @@ def language_directory():
     return (Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent) / 'ocr_data'
 
 
-def recognize(data, language='chi_sim+eng', tessdata=None):
+def recognize(data, language='chi_sim+eng', tessdata=None, fontfile=None):
     if language not in LANGUAGES:
         raise ValueError('请选择简体中文＋英文或英文。')
     folder = Path(tessdata) if tessdata is not None else language_directory()
@@ -76,6 +76,11 @@ def recognize(data, language='chi_sim+eng', tessdata=None):
         raise ValueError('未识别到文字。请框选清晰的横排印刷文字，适当留出边距后重试。')
     if sum(len(line['text']) for line in lines) > 20000:
         raise ValueError('识别文字过多，请分块转换。')
+    if len(lines) > 200:
+        raise ValueError('识别行数超过 200，请分块转换。')
+    from ocr_layout import match_line
+    for line in lines:
+        line['spec'] = match_line(data, line, fontfile, pix)
     return dict(text='\n'.join(line['text'] for line in lines), lines=lines,
                 size=max(4, min(96, statistics.median(line['bbox'][3]-line['bbox'][1] for line in lines))))
 
@@ -88,7 +93,7 @@ def main():
             if len(raw) > 64 * 1024 * 1024:
                 raise ValueError('OCR 请求过大。')
             request = json.loads(raw)
-            result = recognize(request['snapshot'], request.get('language', 'chi_sim+eng'))
+            result = recognize(request['snapshot'], request.get('language', 'chi_sim+eng'), fontfile=request.get('fontfile'))
             response = dict(id=request['id'], data=result)
         except Exception as exc:
             response = dict(id=request.get('id'), error=str(exc))
