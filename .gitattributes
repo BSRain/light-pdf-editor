@@ -3,3 +3,4 @@
 *.md text eol=lf
 *.bat text eol=crlf
 *.png binary
+ocr_data/* -text
