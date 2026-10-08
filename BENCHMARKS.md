@@ -107,3 +107,5 @@ At most one fallback layer with 16 MiB of pixel data is retained; this bounds di
 
 运行 `.venv\Scripts\python.exe benchmark_ocr.py`；生成的中英混排小选区结果见 `benchmarks/ocr-v0.7.0.json`。仅测引擎调用，排除 GUI 和进程通信；三次结果不代表所有扫描件性能，首版不承诺通用耗时或准确率。
 Run the generated OCR benchmark; results cover direct engine calls only, excluding GUI/IPC and do not generalize to all scans.
+
+v0.8.0 同一生成样本的 OCR＋逐行字迹匹配结果见 `benchmarks/ocr-v0.8.0.json`。仍只测引擎，含新增样式匹配开销，排除 GUI / IPC。 / v0.8.0 measures the same fixture including per-line style matching, excluding GUI/IPC.

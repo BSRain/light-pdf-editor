@@ -3,6 +3,16 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.8.0 — 2026-10-08
+
+- 验收包含 129 项源码回归；最终 ZIP 另行执行三档实际 EXE 工作流。 / Acceptance includes 129 source regressions and a separate three-scale packaged workflow.
+
+- OCR 默认按行重建独立文字框，校对窗口逐行调整；保留整块模式。 / Default to independent OCR line boxes with per-line review; retain whole-block mode.
+- 分别估算每行字迹颜色，并用替代字体实际字迹宽高匹配位置和字号，减少统一字号造成的偏移。 / Estimate each line’s ink color and match placement/size using substitute-font raster ink dimensions.
+- 多行转换仍为一次事务和一次撤销，后续行失败时回滚所有修改；工程重开保持独立文字框。 / Multi-line conversion remains one transaction/undo, with complete rollback and independent project objects.
+- 新增实际 OCR 混合字号 / 颜色、字迹位置、逐行编辑、预览一致和后续行失败回滚回归。 / Add real OCR style/position, independent editing, preview parity and late-row rollback regressions.
+- 自动匹配仍需人工校对；选区图片仍整片填纯色，尚未增加扫描表格线保护。 / Review automatic estimates; raster selection still receives a solid fill, without table-line protection.
+
 ## v0.7.0 — 2026-10-08
 
 - 新增离线简体中文 / 英文 OCR：框选扫描文字、校对、调整字体 / 颜色 / 留白，查看实际 PDF 转换预览后确认。 / Offline Chinese/English region OCR with proofreading, typography controls and actual PDF preview.

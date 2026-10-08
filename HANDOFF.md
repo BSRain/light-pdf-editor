@@ -1,14 +1,14 @@
-# v0.7.0 交付说明 / Handoff
+# v0.8.0 交付说明 / Handoff
 
 自用 / Personal use。按需求加入局部 OCR 转换，保留实际问题修复；仓库未归档。软件在本机处理文件，不上传工作 PDF。
 Region OCR conversion is available; actual-use fixes remain possible. The repository is not archived. Documents are processed locally.
 
 ## 安装与更新 / Install and update
 
-从 [v0.7.0 Release](https://github.com/BSRain/light-pdf-editor/releases/tag/v0.7.0) 下载 Windows x64 ZIP，解压到新目录，运行 `LightPDFEditor.exe`。保留同目录的 `PdfWorker.exe`、`_internal`、`ocr_data`。关闭旧程序再启动新版本；自己的 PDF、`.lpdf` 工程及恢复副本保留在原有位置，不要覆盖到程序目录。需要回退时，关闭新版后运行之前版本。
+从 [v0.8.0 Release](https://github.com/BSRain/light-pdf-editor/releases/tag/v0.8.0) 下载 Windows x64 ZIP，解压到新目录，运行 `LightPDFEditor.exe`。保留同目录的 `PdfWorker.exe`、`_internal`、`ocr_data`。关闭旧程序再启动新版本；自己的 PDF、`.lpdf` 工程及恢复副本保留在原有位置，不要覆盖到程序目录。需要回退时，关闭新版后运行之前版本。
 Download the Windows x64 ZIP from the release, extract into a new directory and run `LightPDFEditor.exe`. Keep `PdfWorker.exe`, `_internal` and `ocr_data`. Close the old application first; keep your PDFs, `.lpdf` projects and recovery copies separately. To roll back, close this version and run a previous release.
 
-ZIP 旁提供 SHA-256 校验文件。PowerShell 命令：`Get-FileHash .\LightPDFEditor-0.7.0-windows-x64.zip -Algorithm SHA256`，对照附件中的值。依赖许可证位于 `licenses/`，对应源码与文档位于 `source/`。
+ZIP 旁提供 SHA-256 校验文件。PowerShell 命令：`Get-FileHash .\LightPDFEditor-0.8.0-windows-x64.zip -Algorithm SHA256`，对照附件中的值。依赖许可证位于 `licenses/`，对应源码与文档位于 `source/`。
 Compare the PowerShell hash with the release checksum. Dependency licenses are in `licenses/`; matching source and docs are in `source/`.
 
 ## 常用操作 / Daily workflows
@@ -43,9 +43,11 @@ Record version, Windows scale, steps, exact error and reproducibility. Prefer ge
 Release 提供 ZIP、SHA-256 和本机稳定性 JSON；复现命令见 [构建说明](BUILD_WINDOWS.md)，测试边界见 [稳定性说明](STABILITY.md)，性能收益与取舍见 [性能报告](BENCHMARKS.md)。本次新增局部 OCR 转换。建议实际稳定使用 1～2 周后再决定是否归档；有问题先发布 0.6.x 修复。
 The release includes ZIP, SHA-256 and local stability JSON. See build commands, acceptance scope and benchmark tradeoffs in the linked documents. Further features depend on actual needs. Consider archiving after 1–2 weeks of stable actual use; fix issues in 0.6.x first.
 
-## v0.7.0 卡住时的处理 / Unresponsive worker
+## v0.8.0 卡住时的处理 / Unresponsive worker
 
 可直接点击“重启处理进程”，默认选择取消；确认会放弃未保存修改并中止工作进程。若有恢复副本，可重新打开最近成功的副本。请求到达 120 秒（打开 / 编辑 / 保存等为 300 秒）会自动停止并提示。保存是否已经完成需要核对输出文件。错误提示中的本地 worker 日志可能含路径及 stderr 中的文档信息，不要未经检查直接分享。
 Use “重启处理进程” to stop/restart; cancellation is the default. Confirmation abandons unsaved changes. Reopen a successful recovery copy if available. Requests automatically stop after 120 seconds (300 for open/edit/save and similar operations). Check output files to determine whether saving completed. Review local worker logs for paths/document details before sharing.
 
-OCR 使用步骤及限制见 [中文说明](README.md#ocr扫描图片转为可编辑文字v070) / [English](README.en.md)。
+OCR 使用步骤及限制见 [中文说明](README.md#ocr扫描图片转为可编辑文字v080) / [English](README.en.md)。
+
+OCR 默认逐行生成独立文字框，校对时选择行，可分别调整位置、字号和颜色。仍保留整块模式。整个选区会填纯色，请避开扫描表格线和图标；本次未增加表格线保护。 / OCR now defaults to independent line boxes with per-line position, size and color controls; whole-block mode remains. The whole selection is filled, so avoid raster rules/icons; table-line protection was not added.

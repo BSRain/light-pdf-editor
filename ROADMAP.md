@@ -3,7 +3,7 @@
 > 自用 / Personal use。以下是计划，不代表已实现；按实际使用反馈调整优先级，不预设发布日期。
 > Planned work, not released features. Priorities follow personal-use feedback; no release dates are promised.
 
-## 当前版本 / Current: v0.7.0 — 局部 OCR 转换 / Region OCR conversion
+## 当前版本 / Current: v0.8.0 — 局部 OCR 转换 / Region OCR conversion
 
 Qt 界面、独立 PDF 处理进程、可见区域分块渲染、原文基线与边缘吸附、字体样式取样、增删文字、字符 / 词段选择与删除预览、本次会话新增文字再次编辑、重叠框选择、删除后保留独立文字框、相邻文字保护、加粗、撤销 / 重做、拖放、加密文件保存。
 
@@ -110,5 +110,10 @@ Whole-document batch OCR, document-wide reflow, cloud processing, collaborative 
 按用户新需求加入离线中英文区域 OCR、人工校对、实际 PDF 转换预览、原图擦除与文字重建的一次性事务。保留撤销、工程继续编辑和纯色背景限制。
 Offline Chinese/English region recognition, proofreading, actual PDF preview and atomic raster-to-editable-text conversion. Preserve undo and project editing; flat backgrounds only.
 
-后续候选（未承诺）：逐行独立文字框、旋转文字方向识别、批量页识别。先根据实际扫描件反馈决定。
-Candidates, not commitments: separate boxes per line, orientation detection, batch recognition, based on real scan feedback.
+后续候选（未承诺）：旋转文字方向识别、批量页识别。先根据实际扫描件反馈决定。
+Candidates, not commitments: orientation detection, batch recognition, based on real scan feedback.
+
+## v0.8.0
+
+逐行独立文字框；按每行原图字迹与替代字体测量匹配位置、字号、颜色，校对窗口逐行调整。保留整块模式和一次撤销；整片纯色填充范围不变，表格线保护尚未实现。
+Independent line boxes and per-line ink-based position/size/color estimates, reviewed individually. Preserve whole-block mode and one-step undo; the entire selection is still filled and table-line protection is not implemented.

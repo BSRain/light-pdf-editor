@@ -1,4 +1,4 @@
-# Light PDF Editor v0.7.0 · Qt Edition · Personal Use
+# Light PDF Editor v0.8.0 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -216,15 +216,17 @@ Individual request/response frames are limited to 64 MiB; malformed JSON, wrong 
 
 Rectangle deletion now validates surviving character count, text and geometry, rolling back when it cannot preserve outside text safely. See CHANGELOG for the current test count.
 
-## OCR: scanned image to editable text (v0.7.0)
+## OCR: scanned image to editable text (v0.8.0)
 
 1. Choose **OCR 转为文字** and select a small region of horizontal printed text on a flat background. Recognition is offline, in Simplified Chinese + English or English.
-2. Correct the text, choose a substitute font, size, text/fill colors and left/top padding. Compare the original crop with the actual PDF conversion preview. Reduce size or padding if text does not fit.
-3. Confirm to remove image pixels and existing text in the selected region, fill it and insert one editable text box. Failure rolls back the whole operation; one Undo restores the original.
+2. The default creates one independent box per OCR line. Select a line to proofread it. Position, size and ink color are estimated separately; adjust each line’s font, size, color and offsets. Fill color applies to the entire region. A whole-block mode remains available. Compare the original crop with the actual PDF conversion preview. Reduce size or padding if text does not fit.
+3. Confirm to remove image pixels and existing text in the selected region, fill it and insert independent text boxes per line (one box in whole-block mode). Failure rolls back the whole operation; one Undo restores the original.
 4. Use **编辑新增文字** to select, change or move the replacement, or delete it with text tools. Save an `.lpdf` project to retain editable-object metadata across sessions; PDF export contains real text.
 
-One region becomes one box. Convert columns/cells separately. Original fonts, tables and complex layouts are not reconstructed. Raster lines, icons and texture inside the selection will also be erased: select carefully. Proofread recognition errors. Unconverted areas remain images; this is more than a hidden search layer.
+One recognized line becomes one independently editable box; the entire conversion still takes one Undo. Empty lines are omitted, with at least one nonempty line required. Continue converting columns/cells separately. Original fonts, tables and complex layouts are not reconstructed. Raster lines, icons and texture inside the selection will also be erased: select carefully. Proofread recognition errors. Unconverted areas remain images; this is more than a hidden search layer.
 
 Target resolution is 300 DPI, capped at 12 million pixels by downsampling. A separate OCR process has a 120-second timeout and cancellation without losing the PDF editing session. Images/results stay in memory; no cloud processing or automatic text logging. If outside background sampling is impossible, a warning explains the white default and manual color option.
 
 Keep `ocr_data/` beside the portable executable. It includes pinned Simplified Chinese/English tessdata_fast models, SHA-256 manifest and Apache-2.0 license. Missing models only disable OCR. Source execution uses its adjacent model directory and does not require a separately installed Tesseract CLI. Verify the final executable offline before delivery.
+
+自动匹配为估算，不识别原字体；按选定替代字体的实际字迹尺寸匹配，颜色取自原图对比明显的像素。模糊、低对比或复杂背景请人工检查。 / Matching is an estimate, not original-font identification; substitute-font ink dimensions and contrasting raster colors guide placement. Inspect blurry, low-contrast or complex backgrounds manually.
