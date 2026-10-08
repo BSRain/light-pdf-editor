@@ -203,6 +203,21 @@ class Engine:
         self.objects = {key: obj for key, obj in self.objects.items()
                         if obj['index'] != index or key in survivor_ids}
 
+    def validate_conversion(self, index, request):
+        from ocr_core import checked_rect
+        if request.get('revision') != self.revision:
+            raise ValueError('页面已变化，请重新识别。')
+        rect = checked_rect(self.doc[index], request['rect'])
+        spec = request['spec']
+        validate_spec(self.doc[index], spec)
+        if len(spec['text']) > 20000:
+            raise ValueError('文字过多，请分块转换。')
+        box = fitz.Rect(spec['x'], spec['y'], spec['x']+spec['width'], spec['y']+spec['height'])
+        if not rect.contains(box):
+            raise ValueError('转换文字必须位于原选区内。')
+        if any(o['index'] == index and fitz.Rect(o['bbox']).intersects(rect) for o in self.objects.values()):
+            raise ValueError('选区与已有可编辑文字框重叠，请缩小范围。')
+
     def limit_history(self):
         # Shared undo/redo budget. A single oversize snapshot is retained.
         while len(self.history) + len(self.future) > 1 and (
@@ -298,6 +313,20 @@ class Engine:
             return self.metadata(index)
         if self.edit_doc is not None and kind not in ('tile', 'update_object', 'autosave'):
             raise ValueError('请先应用或取消当前文字编辑。')
+        if kind in ('ocr_snapshot', 'ocr_preview'):
+            if request.get('revision') != self.revision:
+                raise ValueError('页面已变化，请重新识别。')
+            from ocr_core import snapshot
+            if kind == 'ocr_snapshot':
+                return snapshot(self.doc[index], request['rect'])
+            self.validate_conversion(index, request)
+            with self.copy_document() as preview:
+                erase_image_region(preview[index], request['rect'], request['fill_color'])
+                add_text(preview[index], **request['spec'])
+                rect = fitz.Rect(request['rect'])
+                scale = min(2, (2_000_000 / (rect.width * rect.height)) ** .5)
+                pix = preview[index].get_pixmap(matrix=fitz.Matrix(scale,scale), clip=rect, alpha=False)
+                return dict(image=self.image(pix))
         if kind == 'page':
             return self.metadata(index)
         if kind == 'tile':
@@ -306,9 +335,10 @@ class Engine:
             pix = self.get_display(index).get_pixmap(matrix=fitz.Matrix(request['scale'], request['scale']),
                                                       clip=fitz.Rect(request['clip']), alpha=False)
             return dict(image=self.image(pix), x=pix.x, y=pix.y, scale=request['scale'])
-        if kind in ('insert', 'delete', 'delete_chars', 'erase_image', 'update_object'):
+        if kind in ('insert', 'delete', 'delete_chars', 'erase_image', 'update_object', 'ocr_convert'):
             before = self.doc.tobytes(encryption=fitz.PDF_ENCRYPT_KEEP)
             before_objects = deepcopy(self.objects)
+            before_serial = self.object_serial
             try:
                 if kind == 'insert':
                     self.insert_object(index, request['spec'])
@@ -318,6 +348,10 @@ class Engine:
                         raise ValueError('文字对象已失效，请取消后重新选择。')
                     self.remove_object(self.doc, obj)
                     self.insert_object(index, request['spec'], obj['id'])
+                elif kind == 'ocr_convert':
+                    self.validate_conversion(index, request)
+                    self.delete_preserving_objects(index, rect=request['rect'], images=True, fill_color=request['fill_color'])
+                    self.insert_object(index, request['spec'])
                 elif kind == 'erase_image':
                     if request.get('revision') != self.revision:
                         raise ValueError('页面已变化，请重新选择图片区域。')
@@ -331,6 +365,7 @@ class Engine:
             except Exception:
                 self.restore(before)
                 self.objects = before_objects
+                self.object_serial = before_serial
                 raise
             self.end_edit()
             self.future = []

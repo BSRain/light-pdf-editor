@@ -30,5 +30,8 @@ if __name__ == '__main__':
         connect_standard_pipes()
     except RuntimeError:
         sys.exit(2)
-    from pdf_worker import main
+    if '--ocr' in sys.argv:
+        from ocr_core import main
+    else:
+        from pdf_worker import main
     main()

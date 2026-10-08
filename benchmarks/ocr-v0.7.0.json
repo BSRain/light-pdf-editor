@@ -1,0 +1,17 @@
+{
+  "scope": "Generated 330x125 pt Chinese/English crop. Direct engine only, excludes GUI and IPC. Not representative of all scans.",
+  "dpi": 300,
+  "pixels": 718272,
+  "render_ms": 33.2,
+  "recognition_ms": [
+    174.54,
+    152.96,
+    150.02
+  ],
+  "median_ms": 152.96,
+  "memory": {
+    "working_set_mb": 83.25,
+    "peak_working_set_mb": 124.5
+  },
+  "model_bytes": 6582244
+}
