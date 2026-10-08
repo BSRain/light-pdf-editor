@@ -17,6 +17,7 @@ from pdf_core import windows_fonts
 from alignment import snap_box, nearest_span, match_font, word_at, sample_line_spacing, containing_cell
 from version import __version__
 from pdf_client import PdfClient
+from ocr_dialog import OcrDialog
 
 
 class FocusWheelMixin:
@@ -305,7 +306,7 @@ class PdfView(QGraphicsView):
                     self.editor.delete_selection(QRectF(x0, y0, x1 - x0, y1 - y0))
                 else:
                     self.editor.statusBar().showMessage('此处没有可删除的文字；扫描件请切换“擦除图片区域”。', 5000)
-            elif mode in ('delete', 'precise', 'erase_image'):
+            elif mode in ('delete', 'precise', 'erase_image', 'ocr'):
                 self.selection_start = point
                 pen = QPen(QColor('#d83b01'), 1, Qt.PenStyle.DashLine)
                 pen.setCosmetic(True)
@@ -454,6 +455,7 @@ class Editor(QMainWindow):
         self.resize(min(1280, available.width() - 60), min(860, available.height() - 60))
         self.setMinimumSize(min(900, max(480, available.width() - 60)),
                             min(640, max(360, available.height() - 60)))
+        self.ocr_dialog = None
         self.path = None
         self.last_saved_path = None
         self.index = 0
@@ -565,7 +567,7 @@ class Editor(QMainWindow):
         self.addToolBar(editing)
         editing.addWidget(QLabel('工具  '))
         self.mode = PropertyComboBox()
-        for label, value in [('添加文字', 'add'), ('表格单元格填字', 'cell'), ('编辑新增文字', 'edit'), ('精细删除（按字符）', 'precise'), ('框选删除', 'delete'), ('擦除图片区域', 'erase_image'), ('点选删除文字', 'erase'), ('取样原文样式', 'sample'), ('平移页面', 'pan')]:
+        for label, value in [('添加文字', 'add'), ('表格单元格填字', 'cell'), ('编辑新增文字', 'edit'), ('精细删除（按字符）', 'precise'), ('框选删除', 'delete'), ('擦除图片区域', 'erase_image'), ('OCR 转为文字', 'ocr'), ('点选删除文字', 'erase'), ('取样原文样式', 'sample'), ('平移页面', 'pan')]:
             self.mode.addItem(label, value)
         self.mode.currentIndexChanged.connect(self.mode_changed)
         editing.addWidget(self.mode)
@@ -873,6 +875,8 @@ class Editor(QMainWindow):
         self.client.command('open', path=str(path), epoch=self.epoch)
 
     def worker_failed(self, message):
+        if self.ocr_dialog is not None:
+            self.ocr_dialog.reject()
         self.stop_recovery()
         self.pending_recovery_draft = None
         self.tile_timer.stop()
@@ -956,6 +960,17 @@ class Editor(QMainWindow):
             return
         if request.get('epoch') != self.epoch:
             return
+        if kind == 'ocr_preview':
+            if self.ocr_dialog is not None:
+                self.ocr_dialog.receive_preview(response)
+            return
+        if kind == 'ocr_snapshot':
+            self.set_busy(False)
+            if 'error' in response:
+                QMessageBox.warning(self, 'OCR 未开始', response['error'])
+            else:
+                self.review_ocr(response['data'])
+            return
         if kind == 'thumbnail':
             self.receive_thumbnail(response)
             return
@@ -990,7 +1005,7 @@ class Editor(QMainWindow):
             else:
                 self.set_busy(False)
                 QMessageBox.warning(self, '操作未完成', response['error'])
-                if self.path and kind in ('insert', 'delete', 'delete_chars', 'erase_image', 'undo', 'redo', 'open'):
+                if self.path and kind in ('insert', 'delete', 'delete_chars', 'erase_image', 'undo', 'redo', 'open', 'ocr_convert'):
                     self.client.command('page', index=self.index, epoch=self.epoch)
             return
         data = response['data']
@@ -1007,7 +1022,7 @@ class Editor(QMainWindow):
             self.restore_object_draft(dict(id=pending['editing_id'], spec=pending['spec'], offset=pending['offset']) if pending else data['edit_object'])
             if pending:
                 self.statusBar().showMessage('已恢复重新编辑中的草稿；应用替换，Esc 保留原文字。', 10000)
-        elif kind in ('open', 'page', 'insert', 'delete', 'delete_chars', 'erase_image', 'undo', 'redo', 'update_object', 'cancel_edit'):
+        elif kind in ('open', 'page', 'insert', 'delete', 'delete_chars', 'erase_image', 'undo', 'redo', 'update_object', 'cancel_edit', 'ocr_convert'):
             retired_objects = kind in ('delete', 'delete_chars', 'erase_image') and bool({o['id'] for o in self.objects} - {o['id'] for o in data.get('objects', [])})
             self.load_page(data, fit=kind in ('open', 'page'))
             if kind == 'open' and data.get('recovery'):
@@ -1195,6 +1210,8 @@ class Editor(QMainWindow):
             self.statusBar().showMessage('点选删除：红框标出将删除的文字段；点击删除，Ctrl+Z 撤销。')
         elif self.mode.currentData() == 'erase_image':
             self.statusBar().showMessage('擦除图片区域：拖框预览，可移动 / 拉边角调整；点击“确认擦除”后才修改。Esc 取消。')
+        elif self.mode.currentData() == 'ocr':
+            self.statusBar().showMessage('OCR：框选纯色背景上的横排扫描文字，校对并预览后转为可编辑文字框。')
         elif self.mode.currentData() == 'delete':
             self.statusBar().showMessage('框选删除：拖动框选文字，松开后删除；Ctrl+Z 撤销。')
 
@@ -1444,6 +1461,9 @@ class Editor(QMainWindow):
     def delete_selection(self, rect):
         if self.busy:
             return
+        if self.mode.currentData() == 'ocr':
+            self.start_ocr(rect)
+            return
         if self.mode.currentData() == 'erase_image':
             self.preview_image_erase(rect)
             return
@@ -1451,6 +1471,37 @@ class Editor(QMainWindow):
         self.set_busy(True)
         self.client.command('delete', epoch=self.epoch, index=self.index, revision=self.revision,
                             rect=[rect.left(), rect.top(), rect.right(), rect.bottom()])
+
+    def start_ocr(self, rect):
+        if self.busy or not self.path:
+            return
+        if self.draft is not None or self.editing_id is not None or self.erase_selection is not None:
+            QMessageBox.information(self, '请先完成当前操作', '请先应用或取消当前文字 / 擦除草稿，再进行 OCR。')
+            return
+        self.epoch += 1
+        self.set_busy(True)
+        self.client.command('ocr_snapshot', epoch=self.epoch, index=self.index, revision=self.revision,
+                            rect=[rect.left(),rect.top(),rect.right(),rect.bottom()])
+        self.statusBar().showMessage('正在准备 OCR 选区…')
+
+    def review_ocr(self, snapshot):
+        dialog = OcrDialog(snapshot, self.fonts, self)
+        self.ocr_dialog = dialog
+        context = dict(epoch=self.epoch, index=self.index, revision=self.revision)
+        def preview(fields):
+            if not self.client.dead:
+                self.client.preview = dict(kind='ocr_preview', **context, **fields)
+                self.client.dispatch()
+        dialog.preview_requested.connect(preview)
+        accepted = dialog.exec()
+        self.ocr_dialog = None
+        if self.client.preview and self.client.preview.get('kind') == 'ocr_preview':
+            self.client.preview = None
+        if accepted and not self.client.dead and context == dict(epoch=self.epoch,index=self.index,revision=self.revision):
+            self.epoch += 1
+            self.set_busy(True)
+            self.client.command('ocr_convert', epoch=self.epoch, index=self.index, revision=self.revision, **dialog.payload)
+        dialog.deleteLater()
 
     def preview_image_erase(self, rect):
         rect = rect.normalized().intersected(self.page_rect)
