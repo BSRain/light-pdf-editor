@@ -3,6 +3,14 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.7.0 — 2026-10-08
+
+- 新增离线简体中文 / 英文 OCR：框选扫描文字、校对、调整字体 / 颜色 / 留白，查看实际 PDF 转换预览后确认。 / Offline Chinese/English region OCR with proofreading, typography controls and actual PDF preview.
+- 清除选区原图片像素和文字层，再生成一个可编辑文字框；转换为一个可撤销事务，失败完整回滚。工程保存后可继续修改。 / Atomically erase raster/text content and insert one editable box; rollback on failure, one-step undo and project re-editing.
+- 独立可取消 OCR 进程、120 秒识别超时、1200 万像素预算；锁定并打包离线语言数据和许可证。 / Isolated cancellable worker, 120-second recognition deadline, 12M-pixel budget and bundled pinned language data/licenses.
+- 123 项源码回归通过；包含真实中英文识别、预览一致性、旋转 / 裁切 / 加密转换、取消、超时和模型缺失。 / 123 source regressions passed, including real recognition, preview parity, rotated/cropped/encrypted conversion, cancellation, timeout and missing models.
+- 范围：纯色背景、横排印刷文字，每个选区一个框；不保证字体还原、扫描表格线保留、纹理修复或复杂排版。 / Flat backgrounds and horizontal print, one box per selection; no original-font recovery, raster-table-line preservation, texture reconstruction or layout reconstruction.
+
 ## v0.6.1 — 2026-10-03
 
 - 115 项源码回归通过，包含先失败后修复的挂起、超长响应与删除误伤复现。 / 115 source regressions pass, including previously failing hang, oversized-response and unintended-deletion reproductions.

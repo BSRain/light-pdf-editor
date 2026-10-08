@@ -1,7 +1,7 @@
 # 本机稳定性验收 / Local stability acceptance
 
-当前交付 v0.6.1 自用修复版，验收范围限于下面列出的本机环境；外部验收未因此标记通过。
-Current delivery: v0.6.1 for personal use, validated only in the local environment below; external acceptance is not claimed.
+当前交付 v0.7.0 自用版，验收范围限于下面列出的本机环境；外部验收未因此标记通过。
+Current delivery: v0.7.0 for personal use, validated only in the local environment below; external acceptance is not claimed.
 
 ## 范围 / Scope
 
@@ -34,3 +34,6 @@ v0.6.0-rc.3 adds an actual-EXE sharp-preview transition check: retain the previo
 
 v0.6.1 增加源码故障注入：真实挂起进程、超长通信输出、协议错配、日志写入失败、忙碌时确认 / 取消重启和矩形删除异常回滚。便携自检新增正常进程手动重启确认及文件重开。
 v0.6.1 adds source fault injection for hung workers, oversized output, protocol mismatch, log failures, busy restart confirmation/cancellation and unsafe rectangle rollback. Packaged checks additionally verify live-worker restart confirmation and reopening.
+
+v0.7.0 增加真实中英 OCR、选区坐标、像素上限、语言包缺失、取消 / 超时隔离、预览与提交像素一致、转换整体回滚、四种旋转下裁切加密工程重开编辑及撤销。便携自检增加离线识别、校对、确认转换、撤销重做及导出。
+v0.7.0 adds real Chinese/English OCR, coordinates, pixel bounds, missing-model handling, cancellation/timeout isolation, preview/commit pixel equality, rollback and rotated/cropped encrypted project editing. Packaged checks cover recognition, correction, confirmation, undo/redo and export.

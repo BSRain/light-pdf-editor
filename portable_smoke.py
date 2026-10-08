@@ -9,7 +9,7 @@ import pymupdf as fitz
 from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent
 from PySide6.QtCore import QPoint, QPointF, QRectF, QMimeData, QUrl, Qt, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
-from pdf_core import windows_fonts
+from pdf_core import windows_fonts, add_text
 from version import __version__
 
 
@@ -220,6 +220,68 @@ def run(editor, output):
             if any(abs(a-b)>1 for a,b in zip(pix.pixel(50,50),(232,219,170))) or pix.pixel(10,10) != (232,219,170):
                 raise AssertionError('Image-region erasure did not preserve outside pixels')
         report['checks'].append('scanned-image erasure, automatic background fill and export')
+        ocr_source = output / 'ocr-scan.pdf'
+        with fitz.open() as raster:
+            page = raster.new_page(width=420, height=260)
+            add_text(page,55,65,'金额 5000 元\nInvoice 12345',20,(0,0,0),windows_fonts().get('微软雅黑'),300,100)
+            pixels = page.get_pixmap(matrix=fitz.Matrix(3,3))
+            with fitz.open() as doc:
+                page = doc.new_page(width=420,height=260)
+                page.insert_image(page.rect,pixmap=pixels)
+                doc.save(ocr_source)
+        editor.open_pdf(str(ocr_source))
+        wait(lambda: not editor.busy and editor.path == ocr_source)
+        stages = []
+        ocr_errors = []
+        ocr_end = time.monotonic()+30
+        def drive_ocr():
+            dialog = editor.ocr_dialog
+            if dialog is None:
+                return
+            try:
+                if time.monotonic()>ocr_end:
+                    raise AssertionError('OCR timeout: '+dialog.status.text())
+                if not stages and not dialog.recognizing and '5000' in dialog.text.toPlainText():
+                    if '金额' not in dialog.text.toPlainText().replace(' ',''):
+                        raise AssertionError('Chinese OCR failed')
+                    dialog.text.setPlainText('金额 6000 元\nInvoice 12345')
+                    dialog.size.setValue(18)
+                    stages.append('corrected')
+                elif stages and dialog.confirm.isEnabled():
+                    available=dialog.screen().availableGeometry()
+                    if dialog.width()>available.width() or dialog.height()>available.height():
+                        raise AssertionError('OCR dialog exceeds screen')
+                    if dialog.confirm.visibleRegion().boundingRect()!=dialog.confirm.rect():
+                        raise AssertionError('OCR confirm button clipped')
+                    dialog.grab().save(str(output/'ocr-preview.png'))
+                    dialog.confirm.click()
+                    stages.append('confirmed')
+            except Exception as exc:
+                ocr_errors.append(str(exc));dialog.reject()
+        ocr_timer = QTimer(editor)
+        ocr_timer.setInterval(30);ocr_timer.timeout.connect(drive_ocr);ocr_timer.start()
+        try:
+            editor.mode.setCurrentIndex(editor.mode.findData('ocr'))
+            editor.delete_selection(QRectF(40,50,330,125))
+            wait(lambda: ocr_errors or (len(stages)==2 and editor.ocr_dialog is None and not editor.busy))
+            if ocr_errors: raise AssertionError(ocr_errors)
+        finally:
+            ocr_timer.stop()
+        if len(editor.objects)!=1 or '6000' not in editor.objects[0]['spec']['text']:
+            raise AssertionError('OCR did not create editable text')
+        editor.undo();wait(lambda:not editor.busy)
+        if editor.characters or editor.objects:
+            raise AssertionError('OCR undo did not restore raster-only original')
+        editor.redo();wait(lambda:not editor.busy)
+        ocr_output=output/'ocr-converted.pdf'
+        editor.set_busy(True)
+        editor.client.command('save',path=str(ocr_output),epoch=editor.epoch)
+        wait(lambda:not editor.busy and ocr_output.exists())
+        with fitz.open(ocr_output) as doc:
+            if '6000' not in doc[0].get_text(): raise AssertionError('OCR export has no editable text')
+        report['checks'].append('offline Chinese/English OCR, correction, actual conversion preview, atomic conversion, undo/redo and export')
+        editor.open_pdf(str(scan_output))
+        wait(lambda:not editor.busy and editor.path == scan_output)
         editor.mode.setCurrentIndex(editor.mode.findData('add'))
         editor.text_input.setPlainText('Recovered draft')
         editor.coords['width'].setValue(170)

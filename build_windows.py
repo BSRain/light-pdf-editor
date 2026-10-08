@@ -28,6 +28,11 @@ def main():
     dist = safe_build_path('dist')
     work = safe_build_path('build')
     release = safe_build_path('releases')
+    model_root = ROOT / 'ocr_data'
+    manifest = json.loads((model_root/'manifest.json').read_text(encoding='utf-8'))
+    for name, expected in manifest['sha256'].items():
+        if hashlib.sha256((model_root/name).read_bytes()).hexdigest() != expected:
+            raise RuntimeError('OCR model checksum mismatch: ' + name)
     subprocess.run([sys.executable, '-m', 'PyInstaller', '--noconfirm', '--distpath', str(dist),
                     '--workpath', str(work), str(ROOT/'light_pdf_editor.spec')], cwd=ROOT, check=True)
     source = output / 'source'
@@ -37,12 +42,17 @@ def main():
         p.name == 'start.bat' or p.name.startswith('ui_') and p.suffix == '.png')]
     for path in selected:
         shutil.copy2(path, source / path.name)
+    for target in (output/'ocr_data', source/'ocr_data'):
+        target.mkdir(exist_ok=True)
+        for path in model_root.iterdir():
+            if path.is_file():
+                shutil.copy2(path, target/path.name)
     benchmark_source = source / 'benchmarks'
     benchmark_source.mkdir(exist_ok=True)
     for path in (ROOT / 'benchmarks').glob('*.json'):
         shutil.copy2(path, benchmark_source / path.name)
     packages = ('PyMuPDF', 'PySide6', 'PySide6_Essentials', 'PySide6_Addons', 'shiboken6', 'Pillow', 'PyInstaller')
-    notices = []
+    notices = ['Tesseract tessdata_fast language data: see ocr_data/manifest.json and ocr_data/LICENSE']
     for package in packages:
         distribution = metadata.distribution(package)
         notices.append(f'{package} {distribution.version}')

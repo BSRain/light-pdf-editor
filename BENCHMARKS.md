@@ -102,3 +102,8 @@ An obsolete response has a scale mismatching the view at reply time; it may stil
 
 旧层最多一层、像素数据 16 MiB；这是对已有分块缓存之外持有的显示引用的约束，不是进程总内存上限。已有分块缓存仍为 64 MiB；正在执行的工作进程请求不能抢占。
 At most one fallback layer with 16 MiB of pixel data is retained; this bounds display references, not total process memory. Existing tile cache remains 64 MiB. Active worker requests are non-preemptible.
+
+## v0.7.0 OCR
+
+运行 `.venv\Scripts\python.exe benchmark_ocr.py`；生成的中英混排小选区结果见 `benchmarks/ocr-v0.7.0.json`。仅测引擎调用，排除 GUI 和进程通信；三次结果不代表所有扫描件性能，首版不承诺通用耗时或准确率。
+Run the generated OCR benchmark; results cover direct engine calls only, excluding GUI/IPC and do not generalize to all scans.

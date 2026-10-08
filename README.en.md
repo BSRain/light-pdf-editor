@@ -1,4 +1,4 @@
-# Light PDF Editor v0.6.1 · Qt Edition · Personal Use
+# Light PDF Editor v0.7.0 · Qt Edition · Personal Use
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -24,7 +24,7 @@ Open “页面导航” in the toolbar and click a thumbnail to change pages. Th
 
 Download the Windows x64 ZIP from [GitHub Releases](https://github.com/BSRain/light-pdf-editor/releases), extract everything and run `LightPDFEditor.exe`. Keep `PdfWorker.exe` and `_internal` beside it. See [build and validation notes](BUILD_WINDOWS.md). Clean Windows without Python and physical multi-monitor validation remain pending.
 
-Feature development is frozen; follow-up work is limited to actual-use fixes. The repository is not archived. See [quick start and handoff](HANDOFF.md) for workflows, limits and issue reporting.
+Region OCR conversion was added by request; further work follows actual-use feedback. The repository is not archived. See [quick start and handoff](HANDOFF.md) for workflows, limits and issue reporting.
 
 ## Start
 
@@ -143,7 +143,7 @@ Regression tests cover worker exit, interrupted edits, restart confirmation/canc
 
 ## Limitations and personal-use notice
 
-No OCR, direct rewriting of existing text, or document-wide reflow. Exact glyph matching is not guaranteed when the original font is unavailable. Editing signed PDFs can invalidate their signatures. Metadata and attachments are not sanitized.
+Region OCR conversion is supported; arbitrary original-text rewriting and document-wide reflow are not. Exact glyph matching is not guaranteed when the original font is unavailable. Editing signed PDFs can invalidate their signatures. Metadata and attachments are not sanitized.
 
 This project is for personal learning and everyday use. No separate open-source license is included. This notice does not replace the licenses of Qt, PyMuPDF, other dependencies, or installed fonts.
 
@@ -215,3 +215,16 @@ Worker startup is limited to 30 seconds; page/tile/preview requests to 120 secon
 Individual request/response frames are limited to 64 MiB; malformed JSON, wrong IDs and oversized replies stop the worker rather than being silently skipped. This is not a process-wide memory limit. Local `worker-` logs do not serialize request passwords/text; stderr may still contain paths or document details, so review before sharing. Unwritable diagnostics are reported without preventing recovery.
 
 Rectangle deletion now validates surviving character count, text and geometry, rolling back when it cannot preserve outside text safely. See CHANGELOG for the current test count.
+
+## OCR: scanned image to editable text (v0.7.0)
+
+1. Choose **OCR 转为文字** and select a small region of horizontal printed text on a flat background. Recognition is offline, in Simplified Chinese + English or English.
+2. Correct the text, choose a substitute font, size, text/fill colors and left/top padding. Compare the original crop with the actual PDF conversion preview. Reduce size or padding if text does not fit.
+3. Confirm to remove image pixels and existing text in the selected region, fill it and insert one editable text box. Failure rolls back the whole operation; one Undo restores the original.
+4. Use **编辑新增文字** to select, change or move the replacement, or delete it with text tools. Save an `.lpdf` project to retain editable-object metadata across sessions; PDF export contains real text.
+
+One region becomes one box. Convert columns/cells separately. Original fonts, tables and complex layouts are not reconstructed. Raster lines, icons and texture inside the selection will also be erased: select carefully. Proofread recognition errors. Unconverted areas remain images; this is more than a hidden search layer.
+
+Target resolution is 300 DPI, capped at 12 million pixels by downsampling. A separate OCR process has a 120-second timeout and cancellation without losing the PDF editing session. Images/results stay in memory; no cloud processing or automatic text logging. If outside background sampling is impossible, a warning explains the white default and manual color option.
+
+Keep `ocr_data/` beside the portable executable. It includes pinned Simplified Chinese/English tessdata_fast models, SHA-256 manifest and Apache-2.0 license. Missing models only disable OCR. Source execution uses its adjacent model directory and does not require a separately installed Tesseract CLI. Verify the final executable offline before delivery.
