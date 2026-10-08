@@ -3,4 +3,6 @@
 *.md text eol=lf
 *.bat text eol=crlf
 *.png binary
-ocr_data/* -text
+ocr_data/*.traineddata binary
+ocr_data/LICENSE -text
+ocr_data/*.json text eol=lf
