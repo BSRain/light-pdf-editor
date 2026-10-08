@@ -54,6 +54,7 @@ class OcrUiTests(unittest.TestCase):
         stage=[]
         def drive(d):
             if not stage and not d.recognizing and '5000' in d.text.toPlainText():
+                d.grouping.setCurrentIndex(1)
                 d.text.setPlainText('金额 6000 元\nInvoice 12345');d.size.setValue(18);stage.append('corrected')
                 self.assertFalse(d.confirm.isEnabled())
             elif stage and d.confirm.isEnabled():
@@ -65,6 +66,36 @@ class OcrUiTests(unittest.TestCase):
         self.e.undo();self.wait(lambda:not self.e.busy)
         self.assertFalse(self.e.objects);self.assertFalse(self.e.characters)
         self.e.redo();self.wait(lambda:not self.e.busy);self.assertEqual(len(self.e.objects),1)
+
+    def test_line_correction_does_not_change_other_line(self):
+        stage=[]
+        def drive(d):
+            if not stage and not d.recognizing and len(d.line_specs)==2:
+                self.assertEqual(d.layout_kind,0)
+                other=dict(d.line_specs[1]);stage.append(other)
+                d.text.setPlainText('金额 6000 元')
+                self.assertEqual(d.line_specs[1],other)
+            elif stage and d.confirm.isEnabled():
+                d.grab().save('tmp/ocr-lines-dialog.png')
+                d.confirm.click();return True
+        self.run_dialog(drive)
+        self.assertEqual(len(self.e.objects),2)
+        self.assertIn('6000',self.e.objects[0]['spec']['text'])
+        self.assertEqual(self.e.objects[1]['spec'],stage[0])
+        self.e.undo();self.wait(lambda:not self.e.busy)
+        self.assertFalse(self.e.objects)
+
+    def test_unavailable_font_invalidates_approved_preview(self):
+        stage=[]
+        def drive(d):
+            if not stage and d.confirm.isEnabled():
+                d.font.addItem('Missing font',str(Path(self.folder.name)/'missing.ttf'))
+                d.font.setCurrentIndex(d.font.count()-1)
+                self.assertFalse(d.confirm.isEnabled())
+                self.assertIn('字体',d.status.text())
+                stage.append(True);d.reject();return True
+        self.run_dialog(drive)
+        self.assertFalse(self.e.dirty)
 
     def test_ocr_timeout_does_not_stop_pdf_worker(self):
         import sys

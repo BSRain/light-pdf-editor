@@ -244,7 +244,7 @@ def run(editor, output):
                 if not stages and not dialog.recognizing and '5000' in dialog.text.toPlainText():
                     if '金额' not in dialog.text.toPlainText().replace(' ',''):
                         raise AssertionError('Chinese OCR failed')
-                    dialog.text.setPlainText('金额 6000 元\nInvoice 12345')
+                    dialog.text.setPlainText('金额 6000 元')
                     dialog.size.setValue(18)
                     stages.append('corrected')
                 elif stages and dialog.confirm.isEnabled():
@@ -267,7 +267,7 @@ def run(editor, output):
             if ocr_errors: raise AssertionError(ocr_errors)
         finally:
             ocr_timer.stop()
-        if len(editor.objects)!=1 or '6000' not in editor.objects[0]['spec']['text']:
+        if len(editor.objects)!=2 or '6000' not in editor.objects[0]['spec']['text']:
             raise AssertionError('OCR did not create editable text')
         editor.undo();wait(lambda:not editor.busy)
         if editor.characters or editor.objects:
@@ -279,7 +279,7 @@ def run(editor, output):
         wait(lambda:not editor.busy and ocr_output.exists())
         with fitz.open(ocr_output) as doc:
             if '6000' not in doc[0].get_text(): raise AssertionError('OCR export has no editable text')
-        report['checks'].append('offline Chinese/English OCR, correction, actual conversion preview, atomic conversion, undo/redo and export')
+        report['checks'].append('offline Chinese/English OCR, correction, per-line style matching and conversion preview, atomic multi-box conversion, undo/redo and export')
         editor.open_pdf(str(scan_output))
         wait(lambda:not editor.busy and editor.path == scan_output)
         editor.mode.setCurrentIndex(editor.mode.findData('add'))
