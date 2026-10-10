@@ -18,6 +18,7 @@ from alignment import snap_box, nearest_span, match_font, word_at, sample_line_s
 from version import __version__
 from pdf_client import PdfClient
 from ocr_dialog import OcrDialog
+from original_dialog import OriginalTextDialog
 
 
 class FocusWheelMixin:
@@ -295,6 +296,8 @@ class PdfView(QGraphicsView):
                 self.editor.sample(point)
             elif mode == 'cell':
                 self.editor.place_cell(point)
+            elif mode == 'native':
+                self.editor.edit_original_at(point)
             elif mode == 'edit':
                 self.editor.edit_at(point)
             elif mode == 'add':
@@ -456,6 +459,7 @@ class Editor(QMainWindow):
         self.setMinimumSize(min(900, max(480, available.width() - 60)),
                             min(640, max(360, available.height() - 60)))
         self.ocr_dialog = None
+        self.native_dialog = None
         self.path = None
         self.last_saved_path = None
         self.index = 0
@@ -556,6 +560,8 @@ class Editor(QMainWindow):
         bar.addWidget(self.page_label)
         self.next_action = self.action(bar, '下一页', lambda: self.turn(1))
         self.action(bar, '跳转页码', self.prompt_page, 'Ctrl+G')
+        self.rotate_left_action = self.action(bar, '左转 90°', lambda: self.rotate_page(-90))
+        self.rotate_right_action = self.action(bar, '右转 90°', lambda: self.rotate_page(90))
         self.action(bar, '适合页面', self.fit_page, 'Ctrl+0')
         self.action(bar, '−', lambda: self.view.set_zoom(self.view.zoom / 1.2))
         self.zoom_label = QLabel('100%')
@@ -567,7 +573,7 @@ class Editor(QMainWindow):
         self.addToolBar(editing)
         editing.addWidget(QLabel('工具  '))
         self.mode = PropertyComboBox()
-        for label, value in [('添加文字', 'add'), ('表格单元格填字', 'cell'), ('编辑新增文字', 'edit'), ('精细删除（按字符）', 'precise'), ('框选删除', 'delete'), ('擦除图片区域', 'erase_image'), ('OCR 转为文字', 'ocr'), ('点选删除文字', 'erase'), ('取样原文样式', 'sample'), ('平移页面', 'pan')]:
+        for label, value in [('添加文字', 'add'), ('表格单元格填字', 'cell'), ('编辑新增文字', 'edit'), ('修改原有文字', 'native'), ('精细删除（按字符）', 'precise'), ('框选删除', 'delete'), ('擦除图片区域', 'erase_image'), ('OCR 转为文字', 'ocr'), ('点选删除文字', 'erase'), ('取样原文样式', 'sample'), ('平移页面', 'pan')]:
             self.mode.addItem(label, value)
         self.mode.currentIndexChanged.connect(self.mode_changed)
         editing.addWidget(self.mode)
@@ -832,7 +838,7 @@ class Editor(QMainWindow):
 
     def set_busy(self, value):
         self.busy = value
-        for control in (self.open_action, self.save_action, self.project_action, self.recover_action, self.undo_action, self.redo_action, self.prev_action, self.next_action):
+        for control in (self.open_action, self.save_action, self.project_action, self.recover_action, self.undo_action, self.redo_action, self.prev_action, self.next_action, self.rotate_left_action, self.rotate_right_action):
             control.setEnabled(not value)
         self.undo_action.setEnabled(not value and self.can_undo)
         self.redo_action.setEnabled(not value and self.can_redo)
@@ -875,6 +881,8 @@ class Editor(QMainWindow):
         self.client.command('open', path=str(path), epoch=self.epoch)
 
     def worker_failed(self, message):
+        if self.native_dialog is not None:
+            self.native_dialog.reject()
         if self.ocr_dialog is not None:
             self.ocr_dialog.reject()
         self.stop_recovery()
@@ -960,6 +968,17 @@ class Editor(QMainWindow):
             return
         if request.get('epoch') != self.epoch:
             return
+        if kind == 'native_preview':
+            if self.native_dialog is not None:
+                self.native_dialog.receive_preview(response)
+            return
+        if kind == 'native_info':
+            self.set_busy(False)
+            if 'error' in response:
+                QMessageBox.warning(self,'无法修改原文',response['error'])
+            else:
+                self.review_original(response['data'])
+            return
         if kind == 'ocr_preview':
             if self.ocr_dialog is not None:
                 self.ocr_dialog.receive_preview(response)
@@ -1005,7 +1024,7 @@ class Editor(QMainWindow):
             else:
                 self.set_busy(False)
                 QMessageBox.warning(self, '操作未完成', response['error'])
-                if self.path and kind in ('insert', 'delete', 'delete_chars', 'erase_image', 'undo', 'redo', 'open', 'ocr_convert'):
+                if self.path and kind in ('insert', 'delete', 'delete_chars', 'erase_image', 'undo', 'redo', 'open', 'ocr_convert', 'rotate', 'native_replace'):
                     self.client.command('page', index=self.index, epoch=self.epoch)
             return
         data = response['data']
@@ -1022,9 +1041,9 @@ class Editor(QMainWindow):
             self.restore_object_draft(dict(id=pending['editing_id'], spec=pending['spec'], offset=pending['offset']) if pending else data['edit_object'])
             if pending:
                 self.statusBar().showMessage('已恢复重新编辑中的草稿；应用替换，Esc 保留原文字。', 10000)
-        elif kind in ('open', 'page', 'insert', 'delete', 'delete_chars', 'erase_image', 'undo', 'redo', 'update_object', 'cancel_edit', 'ocr_convert'):
+        elif kind in ('open', 'page', 'insert', 'delete', 'delete_chars', 'erase_image', 'undo', 'redo', 'update_object', 'cancel_edit', 'ocr_convert', 'rotate', 'native_replace'):
             retired_objects = kind in ('delete', 'delete_chars', 'erase_image') and bool({o['id'] for o in self.objects} - {o['id'] for o in data.get('objects', [])})
-            self.load_page(data, fit=kind in ('open', 'page'))
+            self.load_page(data, fit=kind in ('open', 'page', 'rotate'))
             if kind == 'open' and data.get('recovery'):
                 self.restore_recovery(data.get('recovery_draft'))
             if retired_objects:
@@ -1202,6 +1221,8 @@ class Editor(QMainWindow):
         self.draw_guides([])
         if self.mode.currentData() == 'cell':
             self.statusBar().showMessage('表格填字：输入文字后点击有完整直线边框的单元格，自动留出 4 pt 内边距。扫描表格不支持。')
+        elif self.mode.currentData() == 'native':
+            self.statusBar().showMessage('点击原有文字，沿用原字体和基线修改；不支持的字体或复杂排版会提示。')
         elif self.mode.currentData() == 'edit':
             self.statusBar().showMessage('点击新增或工程中恢复的文字框，重新修改或移动；应用更新，Esc 取消。')
         elif self.mode.currentData() == 'precise':
@@ -1214,6 +1235,35 @@ class Editor(QMainWindow):
             self.statusBar().showMessage('OCR：框选纯色背景上的横排扫描文字，校对并预览后转为可编辑文字框。')
         elif self.mode.currentData() == 'delete':
             self.statusBar().showMessage('框选删除：拖动框选文字，松开后删除；Ctrl+Z 撤销。')
+
+    def edit_original_at(self, point):
+        if self.busy or not self.path:
+            return
+        if self.draft or self.erase_selection:
+            self.statusBar().showMessage('请先应用或取消当前草稿。',5000)
+            return
+        self.epoch += 1
+        self.set_busy(True)
+        self.client.command('native_info',epoch=self.epoch,index=self.index,revision=self.revision,point=[point.x(),point.y()])
+
+    def review_original(self, info):
+        dialog=OriginalTextDialog(info,self)
+        self.native_dialog=dialog
+        context=dict(epoch=self.epoch,index=self.index,revision=self.revision)
+        def preview(fields):
+            if not self.client.dead:
+                self.client.preview=dict(kind='native_preview',**context,**fields)
+                self.client.dispatch()
+        dialog.preview_requested.connect(preview)
+        accepted=dialog.exec()
+        self.native_dialog=None
+        if self.client.preview and self.client.preview.get('kind')=='native_preview':
+            self.client.preview=None
+        if accepted and not self.client.dead and context==dict(epoch=self.epoch,index=self.index,revision=self.revision):
+            self.epoch+=1
+            self.set_busy(True)
+            self.client.command('native_replace',epoch=self.epoch,index=self.index,revision=self.revision,target=info['target'],text=dialog.text.text())
+        dialog.deleteLater()
 
     def edit_at(self, point):
         if self.busy or not self.path:
@@ -1626,6 +1676,16 @@ class Editor(QMainWindow):
             self.epoch += 1
             self.set_busy(True)
             self.client.command('undo', epoch=self.epoch, index=self.index)
+
+    def rotate_page(self, delta):
+        if self.busy or not self.path:
+            return
+        if self.draft or self.erase_selection:
+            self.statusBar().showMessage('请先应用或取消预览，再旋转页面。',5000)
+            return
+        self.epoch += 1
+        self.set_busy(True)
+        self.client.command('rotate',epoch=self.epoch,index=self.index,revision=self.revision,delta=delta)
 
     def turn(self, delta):
         self.go_to_page(self.index + delta)

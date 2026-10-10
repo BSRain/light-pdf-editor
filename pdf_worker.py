@@ -304,6 +304,8 @@ class Engine:
             obj = self.objects.get(request.get('object_id'))
             if not obj or obj['index'] != index or request.get('revision') != self.revision:
                 raise ValueError('文字对象已失效，请重新选择。')
+            if obj.get('page_rotation', self.doc[index].rotation) != self.doc[index].rotation:
+                raise ValueError('此文字框随页面旋转了方向，请先旋回创建时的方向再编辑文字框。')
             candidate = self.copy_document()
             try:
                 self.remove_object(candidate, obj)
@@ -321,6 +323,21 @@ class Engine:
             return self.metadata(index)
         if self.edit_doc is not None and kind not in ('tile', 'update_object', 'autosave'):
             raise ValueError('请先应用或取消当前文字编辑。')
+        if kind in ('native_info', 'native_preview'):
+            if request.get('revision') != self.revision:
+                raise ValueError('页面已变化，请重新选择原文。')
+            import original_text
+            if kind == 'native_info':
+                target_id,_=original_text.select(self.doc[index],request['point'])
+                target=original_text.prepare(self.doc[index],target_id)
+                with self.copy_document() as candidate:
+                    original_text.verify_original_rendering(self.doc,index,target,candidate)
+                span=target['span']
+                return dict(target=target_id,text=target['text'],font=span['font'],size=span['size'])
+            target=original_text.prepare(self.doc[index],request['target'])
+            with self.copy_document() as candidate:
+                pix=original_text.preview(candidate,index,target,request['text'])
+                return dict(image=self.image(pix))
         if kind in ('ocr_snapshot', 'ocr_preview'):
             if request.get('revision') != self.revision:
                 raise ValueError('页面已变化，请重新识别。')
@@ -344,12 +361,27 @@ class Engine:
             pix = self.get_display(index).get_pixmap(matrix=fitz.Matrix(request['scale'], request['scale']),
                                                       clip=fitz.Rect(request['clip']), alpha=False)
             return dict(image=self.image(pix), x=pix.x, y=pix.y, scale=request['scale'])
-        if kind in ('insert', 'delete', 'delete_chars', 'erase_image', 'update_object', 'ocr_convert'):
+        if kind in ('insert', 'delete', 'delete_chars', 'erase_image', 'update_object', 'ocr_convert', 'rotate', 'native_replace'):
             before = self.doc.tobytes(encryption=fitz.PDF_ENCRYPT_KEEP)
             before_objects = deepcopy(self.objects)
             before_serial = self.object_serial
             try:
-                if kind == 'insert':
+                if kind == 'native_replace':
+                    if request.get('revision') != self.revision:
+                        raise ValueError('页面已变化，请重新选择原文。')
+                    import original_text
+                    target=original_text.prepare(self.doc[index],request['target'])
+                    original_text.replacement_bounds(self.doc[index],target,request['text'])
+                    with self.copy_document() as candidate:
+                        original_text.verify_original_rendering(self.doc,index,target,candidate)
+                    self.delete_preserving_objects(index,ids=target['ids'])
+                    original_text.insert_replacement(self.doc[index],target,request['text'])
+                elif kind == 'rotate':
+                    if request.get('revision') != self.revision:
+                        raise ValueError('页面已变化，请重试旋转。')
+                    from page_rotation import rotate_page
+                    rotate_page(self.doc,index,request['delta'],self.objects)
+                elif kind == 'insert':
                     self.insert_object(index, request['spec'])
                 elif kind == 'update_object':
                     obj = self.objects.get(request.get('object_id'))

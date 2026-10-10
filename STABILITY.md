@@ -1,7 +1,7 @@
 # 本机稳定性验收 / Local stability acceptance
 
-当前交付 v0.8.0 自用版，验收范围限于下面列出的本机环境；外部验收未因此标记通过。
-Current delivery: v0.8.0 for personal use, validated only in the local environment below; external acceptance is not claimed.
+当前交付 v0.9.0 自用版，验收范围限于下面列出的本机环境；外部验收未因此标记通过。
+Current delivery: v0.9.0 for personal use, validated only in the local environment below; external acceptance is not claimed.
 
 ## 范围 / Scope
 
@@ -39,3 +39,5 @@ v0.7.0 增加真实中英 OCR、选区坐标、像素上限、语言包缺失、
 v0.7.0 adds real Chinese/English OCR, coordinates, pixel bounds, missing-model handling, cancellation/timeout isolation, preview/commit pixel equality, rollback and rotated/cropped encrypted project editing. Packaged checks cover recognition, correction, confirmation, undo/redo and export.
 
 v0.8.0 新增逐行独立编辑、字号 / 颜色差异、字迹定位精度、多行事务回滚及工程重开测试。实际 EXE 工作流改为逐行转换，仍覆盖校对、预览、撤销和导出。 / v0.8.0 adds independent-line editing, style/position matching and multi-object rollback/project tests; the packaged workflow now exercises line conversion.
+
+v0.9.0 增加原字体数字连续修改 / 删除、颜色与基线保留、失败不变、裁切旋转加密、当前页旋转 / 导出 / 撤销、旋转工程重开。便携版增加实际原文预览和页面旋转导出工作流（每档共 16 项）。 / v0.9.0 adds original-font repeated edits/deletion, style preservation, rejection safety, cropped/encrypted rotations, current-page rotation/export/undo and project reopening. Portable checks add actual original-text preview and rotation/export (16 workflows per scale).

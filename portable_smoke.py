@@ -87,6 +87,40 @@ def run(editor, output):
         if len(restart_dialogs) != 1:
             raise AssertionError('Manual restart did not show exactly one confirmation')
         report['checks'].append('manual live-worker restart confirmation and reopen')
+        native_stage=[]
+        native_deadline=time.monotonic()+25
+        def edit_native_dialog():
+            dialog=editor.native_dialog
+            if dialog is None:return
+            if time.monotonic()>native_deadline:
+                unexpected_dialogs.append('Original-text preview timeout: '+dialog.status.text());dialog.reject();return
+            if not native_stage:
+                dialog.text.setText('Portable source1');native_stage.append('typed')
+            elif dialog.confirm.isEnabled():
+                if dialog.confirm.visibleRegion().boundingRect()!=dialog.confirm.rect():
+                    unexpected_dialogs.append('Original-text confirmation clipped');dialog.reject();return
+                dialog.grab().save(str(output/'original-text.png'))
+                native_stage.append('confirmed');dialog.confirm.click()
+        native_timer=QTimer(editor);native_timer.setInterval(30);native_timer.timeout.connect(edit_native_dialog);native_timer.start()
+        try:
+            editor.edit_original_at(QPointF(45,55))
+            wait(lambda:len(native_stage)==2 and editor.native_dialog is None and not editor.busy)
+        finally:native_timer.stop()
+        if not any(s['text']=='Portable source1' for s in editor.spans):raise AssertionError('Original text edit missing')
+        editor.undo();wait(lambda:not editor.busy)
+        if not any(s['text']=='Portable source' for s in editor.spans):raise AssertionError('Original text undo failed')
+        report['checks'].append('original-font text replacement, actual preview, visible confirmation and undo')
+        width,height=editor.page_rect.width(),editor.page_rect.height()
+        editor.rotate_page(90);wait(lambda:not editor.busy)
+        if (editor.page_rect.width(),editor.page_rect.height())!=(height,width):raise AssertionError('Rotation dimensions incorrect')
+        rotated=output/'rotated.pdf'
+        editor.set_busy(True);editor.client.command('save',path=str(rotated),index=0,epoch=editor.epoch)
+        wait(lambda:not editor.busy and rotated.exists())
+        with fitz.open(rotated) as d:
+            if [p.rotation for p in d]!=[90,0]:raise AssertionError('Rotation did not persist or changed another page')
+        editor.undo();wait(lambda:not editor.busy)
+        if (editor.page_rect.width(),editor.page_rect.height())!=(width,height):raise AssertionError('Rotation undo failed')
+        report['checks'].append('current-page rotation, PDF export, other-page preservation and undo')
         editor.pages_dock.show()
         wait(lambda: not editor.page_list.item(0).icon().isNull())
         if editor.width() > available.width() or editor.height() > available.height():

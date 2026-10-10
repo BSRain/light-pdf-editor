@@ -57,7 +57,7 @@ class PdfClient(QObject):
             return self.timeout_override
         return self.LONG_TIMEOUT_MS if request['kind'] in (
             'open', 'insert', 'update_object', 'delete', 'delete_chars', 'erase_image',
-            'undo', 'redo', 'begin_edit', 'save', 'save_project', 'autosave', 'ocr_convert', 'ocr_preview', 'ocr_recognize') else self.REQUEST_TIMEOUT_MS
+            'undo', 'redo', 'begin_edit', 'save', 'save_project', 'autosave', 'ocr_convert', 'ocr_preview', 'ocr_recognize', 'native_replace', 'native_preview', 'rotate') else self.REQUEST_TIMEOUT_MS
 
     def timed_out(self):
         self.failure('PDF 处理请求超时，已停止工作进程。')

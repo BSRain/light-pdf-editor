@@ -3,6 +3,14 @@
 自用 / Personal use。版本标签对应可回溯的代码快照。
 Version tags identify reproducible source snapshots.
 
+## v0.9.0 — 2026-10-10
+
+- 原位修改单一格式原文字段，复用原字体、字号、颜色、字距和基线；实际预览后确认，支持重复修改、清空删除和撤销。 / Edit uniform original-text spans using their original font, size, color, tracking and baseline, with actual preview, repeated edits, deletion and undo.
+- 缺字、复杂绘制、无法还原字体、相邻文字碰撞或页面越界时拒绝修改，事务失败完整回滚。 / Reject unavailable glyphs/fonts, unsupported rendering, neighboring-text collisions and page overflow; failures roll back atomically.
+- 当前页左 / 右转 90°，支持撤销重做、加密 PDF 保存和工程重开。旋转框工程升级至格式 4，保留旧格式读取。 / Rotate the current page by ±90°, with undo/redo and PDF/project persistence. Rotated-box projects use format 4; old formats remain readable.
+- 页面转向后保留已有框，但框拖动编辑需先旋回创建方向；原文功能不做全文重排，扫描文字需 OCR。 / Retain boxes across rotation; box editing requires their original orientation. No document reflow; raster text needs OCR.
+- 验收增加连续原文修改、字体 / 基线保留、缺字与碰撞拒绝、旋转裁切加密、项目重开及真实 Qt 操作；便携自检增加原文修改和旋转导出。 / Add source and Qt regressions plus packaged original-text and rotation/export workflows.
+
 ## v0.8.0 — 2026-10-08
 
 - 验收包含 129 项源码回归；最终 ZIP 另行执行三档实际 EXE 工作流。 / Acceptance includes 129 source regressions and a separate three-scale packaged workflow.

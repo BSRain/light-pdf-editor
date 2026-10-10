@@ -3,7 +3,9 @@
 > 自用 / Personal use。以下是计划，不代表已实现；按实际使用反馈调整优先级，不预设发布日期。
 > Planned work, not released features. Priorities follow personal-use feedback; no release dates are promised.
 
-## 当前版本 / Current: v0.8.0 — 局部 OCR 转换 / Region OCR conversion
+## 当前版本 / Current: v0.9.0 — 原文修改与页面旋转 / Original text and rotation
+
+已加入单段原文原格式修改、实际预览、字体 / 字符保护及当前页 90° 旋转。下一步按真实使用反馈处理字体兼容和稳定性；批量页面管理、全文重排、任意角度旋转不在本次范围。 / Added original-style single-span editing, actual preview, font/glyph checks and current-page 90° rotation. Next work follows real font-compatibility and stability feedback; batch page management, full reflow and arbitrary-angle rotation are outside this release.
 
 Qt 界面、独立 PDF 处理进程、可见区域分块渲染、原文基线与边缘吸附、字体样式取样、增删文字、字符 / 词段选择与删除预览、本次会话新增文字再次编辑、重叠框选择、删除后保留独立文字框、相邻文字保护、加粗、撤销 / 重做、拖放、加密文件保存。
 

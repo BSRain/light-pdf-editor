@@ -1,4 +1,12 @@
-# Light PDF Editor v0.8.0 · Qt Edition · Personal Use
+# Light PDF Editor v0.9.0 · Qt Edition · Personal Use
+
+## Original text editing and page rotation (v0.9.0)
+
+- Choose **修改原有文字** (Edit original text), click a text span, change digits or single-line text, review the actual PDF preview, then apply. Empty input deletes that span. Undo and repeated editing are supported.
+- Reuse an unambiguous embedded or PDF standard font, preserving size, color, tracking, baseline and bold/italic glyphs. Missing glyphs and unsupported rendering are rejected without silently substituting a font. Growth into neighboring text or beyond the page is rejected.
+- This edits one uniform-style span without paragraph reflow. Raster text requires OCR first. Inspect the preview before applying.
+- **左转 90° / 右转 90°** rotate the current page, with undo/redo and PDF/project persistence. Apply or cancel pending drafts first.
+- Existing editable boxes rotate with the page and are retained. To drag or edit them with the box editor, first restore the page orientation at which the box was created. Projects containing rotated boxes use format 4 and require v0.9.0 or later.
 
 English | [简体中文](README.md) | [Roadmap](ROADMAP.md) | [Changelog](CHANGELOG.md)
 
@@ -143,7 +151,7 @@ Regression tests cover worker exit, interrupted edits, restart confirmation/canc
 
 ## Limitations and personal-use notice
 
-Region OCR conversion is supported; arbitrary original-text rewriting and document-wide reflow are not. Exact glyph matching is not guaranteed when the original font is unavailable. Editing signed PDFs can invalidate their signatures. Metadata and attachments are not sanitized.
+Region OCR and supported single-span original-text editing are available; arbitrary complex-layout rewriting and document-wide reflow are not. Original-text editing refuses fonts it cannot reliably reuse; OCR uses substitute fonts without exact original-glyph matching. Editing signed PDFs can invalidate their signatures. Metadata and attachments are not sanitized.
 
 This project is for personal learning and everyday use. No separate open-source license is included. This notice does not replace the licenses of Qt, PyMuPDF, other dependencies, or installed fonts.
 

@@ -16,7 +16,7 @@ def page_signature(page):
 
 def write_manifest(doc, objects, serial, index, recovery=False, draft=None):
     has_alignment = any('align' in obj['spec'] for obj in objects.values()) or (draft is not None and 'align' in draft['spec'])
-    format_version = 3 if has_alignment else (2 if recovery else 1)
+    format_version = 4 if any('page_rotation' in o for o in objects.values()) else (3 if has_alignment else (2 if recovery else 1))
     data = dict(format='light-pdf-editor', version=format_version, objects=objects, serial=serial, index=index,
                 recovery=recovery, draft=draft,
                 pages=[page_signature(p) for p in doc])
@@ -57,7 +57,7 @@ def read_manifest(doc):
         raise ValueError('工程信息过大，无法打开。')
     try:
         data = json.loads(doc.embfile_get(ATTACHMENT))
-        if data['format'] != 'light-pdf-editor' or type(data['version']) is not int or data['version'] not in (1, 2, 3):
+        if data['format'] != 'light-pdf-editor' or type(data['version']) is not int or data['version'] not in (1, 2, 3, 4):
             raise ValueError('工程版本不支持，请使用匹配版本的软件。')
         if data['pages'] != [page_signature(p) for p in doc]:
             raise ValueError('工程中的 PDF 页面已被其他软件改变，无法安全恢复文字框。')
@@ -70,11 +70,17 @@ def read_manifest(doc):
             require(key == obj['id'] and key.isdecimal() and 0 < int(key) <= data['serial'])
             require(type(obj['index']) is int and 0 <= obj['index'] < len(doc))
             spec = obj['spec']
-            require('align' not in spec or data['version'] == 3)
+            require('align' not in spec or data['version'] in (3,4))
             page = doc[obj['index']]
-            validate_spec(page, spec)
+            from page_rotation import object_frame
+            if 'page_rotation' in obj:
+                require(data['version']==4 and type(obj['page_rotation']) is int and obj['page_rotation'] in (0,90,180,270))
+            frame,matrix=object_frame(page,obj)
+            validate_spec(frame, spec)
             require(type(obj['offset']) in (int, float) and math.isfinite(obj['offset']) and obj['offset'] > 0)
-            require(obj['bbox'] == [spec['x'], spec['y'], spec['x'] + spec['width'], spec['y'] + spec['height']])
+            import pymupdf as fitz
+            expected=list(fitz.Rect(spec['x'],spec['y'],spec['x']+spec['width'],spec['y']+spec['height'])*matrix)
+            require(len(obj['bbox'])==4 and all(abs(a-b)<.001 for a,b in zip(obj['bbox'],expected)))
             require(obj['streams'])
             for xref, digest in obj['streams']:
                 require(type(xref) is int and xref in page.get_contents() and xref not in used)
@@ -82,9 +88,9 @@ def read_manifest(doc):
                 used.add(xref)
         draft = data.get('draft')
         if draft is not None:
-            require(data['version'] in (2, 3) and data.get('recovery') is True)
+            require(data['version'] in (2, 3, 4) and data.get('recovery') is True)
             require(type(draft['index']) is int and draft['index'] == data['index'])
-            require('align' not in draft['spec'] or data['version'] == 3)
+            require('align' not in draft['spec'] or data['version'] in (3,4))
             validate_spec(doc[draft['index']], draft['spec'], allow_empty=True)
             require(type(draft['offset']) in (int, float) and math.isfinite(draft['offset']) and draft['offset'] > 0)
             edit_id = draft['editing_id']
